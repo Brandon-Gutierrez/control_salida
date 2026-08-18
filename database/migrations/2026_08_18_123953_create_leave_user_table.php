@@ -17,6 +17,7 @@ return new class extends Migration
                   ->nullable(false)
                   ->constrained()
                   ->onDelete('cascade');
+            $table->timestamps();
             $table->foreignId('leave_id')  //llave foranea que hace referencia a la tabla leaves
                   ->nullable(false)
                   ->constrained()
