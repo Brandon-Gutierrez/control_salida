@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('user_leave', function (Blueprint $table) {
+        Schema::create('leave_user', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id') //llave foranea que hace referencia a la tabla users
                   ->nullable(false)
@@ -21,8 +21,7 @@ return new class extends Migration
                   ->nullable(false)
                   ->constrained()
                   ->onDelete('cascade');
-            $table->timestamps();
-            $table->dateTime('exit_time')->nullable(false); //fecha y hora de salida
+            $table->dateTime('leave_time')->nullable(false); //fecha y hora de salida
             $table->dateTime('return_time')->nullable(true); //fecha y hora de retorno
         });
     }
@@ -32,6 +31,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('user_leave');
+        Schema::dropIfExists('leave_user');
     }
 };
