@@ -8,13 +8,13 @@ use Illuminate\Http\Request;
 
 class QrController extends Controller
 {
-    public function generateDinamicQr()
+    public function generateDynamicQr()
     {
         $token = 'qr_comteco' . Str::uuid();
 
         Redis::setex($token, 60, 'qr_libre');
         return response()->json(['token' => $token, 'TTL' => 60, 'status' => 'qr_libre'], 200); 
-    }
+    } //falta retornar error
 
     public function getStatus(Request $request)
     {
@@ -23,16 +23,17 @@ class QrController extends Controller
         $qrStatus = Redis::get($token);
 
         //Validar en redis
-        if(!$qrStatus || !$qrStatus == 'qr_libre') {
+        if(!$qrStatus || $qrStatus !== 'qr_libre') {
             return response()->json([
                 'status' => 'ERROR',
-                'message' => 'QR inválido o ya escaneado'
+                'message' => 'QR invalido o ya escaneado'
                 ], 400);
         }
+        Redis::setex($token, 180, 'qr_en_uso');
 
         //Verifica si el usuario tiene un registro de salida sin retorno
         $isLeave = DB::table('leave_user')
-            ->where('user_id', $user->id)
+            ->where('user_id', $user)
             ->whereNull('return_time')
             ->first();
         
@@ -50,7 +51,7 @@ class QrController extends Controller
                 'message' => 'Bienvenido de regreso, su retorno ha sido registrado correctamente'
                 ], 200);
         }
-
+        //Sino se muestran los motivos de salida
         Redis::expire($token, 180);
         return response()->json([
             'status' => 'SUCCESS', 

@@ -13,11 +13,9 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+            $table->string('username')->unique();
             $table->string('name');
-            $table->string('email')->unique();
-            $table->string('password');
             $table->integer('item')->unique(); //Item corporativo del usuario
-            $table->integer('id_card')->unique(); //Carnet de identidad del usuario
             $table->timestamps();
         });
     }
