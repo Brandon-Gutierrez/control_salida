@@ -21,8 +21,6 @@ class LeaveUser extends Model
 
     // Atributos que deben ser convertidos a tipos nativos
     protected $casts = [
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
         'leave_time' => 'datetime',
         'return_time' => 'datetime',
     ];

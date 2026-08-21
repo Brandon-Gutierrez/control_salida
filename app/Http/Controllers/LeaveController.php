@@ -15,6 +15,7 @@ class LeaveController extends Controller
     {
         $token = $request->input("token");
         $item = $request->input("item");
+        $userToken = $request->input("userToken");
         $reason = $request->input("reason");
         $qrStatus = Redis::get($token);
 
@@ -33,20 +34,27 @@ class LeaveController extends Controller
                 'item' => $item
             ]); 
 
-        if(!$response || $response->json("status") == 1)
+        if(!$response || $response->json("status") == 1 || $userToken !== $response->json("token"))
         {
             return response()->json([
                 "status" => "ERROR",
                 "message" => "Usuario no identificado, intentelo nuevamente",
-                "data" => $response->json()
             ], 400);
         }
+        
+        //Obtener el id del usuario en la base de datos local
+        $userId = DB::table("users")
+            ->where("item", $item)
+            ->first();
+        
+        //Registrar la salida temporal del usuario
+        DB::table("leave_user")->insert([
+            "user_id" => $userId->id,
+            "leave_id" => $reason,
+            "leave_time" => now(),
+        ]);
 
-        /*DB::table("leave_user")->insert([
-            "user_id" => $item,
-            "reason_id" => $reason,
-            "leave_time" => now()
-        ]);*/
+        Redis::del($token);
         return response()->json([
             "status" => "SUCCESS",
             "message" => "Salida temporal registrada correctamente"

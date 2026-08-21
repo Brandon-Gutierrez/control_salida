@@ -21,7 +21,6 @@ return new class extends Migration
                   ->nullable(false)
                   ->constrained()
                   ->onDelete('cascade');
-                  $table->timestamps();
             $table->dateTime('leave_time')->nullable(false); //fecha y hora de salida
             $table->dateTime('return_time')->nullable(true); //fecha y hora de retorno
         });

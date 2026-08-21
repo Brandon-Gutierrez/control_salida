@@ -5,6 +5,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 
 class QrController extends Controller
 {
@@ -19,7 +20,8 @@ class QrController extends Controller
     public function getStatus(Request $request)
     {
         $token = $request->input('token');
-        $user = $request->input('user');
+        $userToken = $request->input('userToken');
+        $item = $request->input('item');
         $qrStatus = Redis::get($token);
 
         //Validar en redis
@@ -30,10 +32,27 @@ class QrController extends Controller
                 ], 400);
         }
         Redis::setex($token, 180, 'qr_en_uso');
+        
+        $response = Http::withHeaders([
+            'keysoftware' => env('KEY_SOFTWARE'),
+            ])->get(env('API_GETCOM'), [
+                'item' => $item
+            ]); 
 
+        if(!$response || $response->json("status") == 1 || $userToken !== $response->json("token"))
+        {
+            return response()->json([
+                "status" => "ERROR",
+                "message" => "Usuario no identificado, intentelo nuevamente",
+            ], 400);
+        }
+        
+        $user = DB::table("users")
+            ->where('item', $item)
+            ->first();
         //Verifica si el usuario tiene un registro de salida sin retorno
         $isLeave = DB::table('leave_user')
-            ->where('user_id', $user)
+            ->where('user_id', $user->id)
             ->whereNull('return_time')
             ->first();
         
@@ -42,7 +61,8 @@ class QrController extends Controller
         {
             DB::table('leave_user')
                 ->where('id', $isLeave->id)
-                ->update(['return_time' => now()]);
+                ->update([
+                    'return_time' => now()]);
 
             Redis::del($token);
 

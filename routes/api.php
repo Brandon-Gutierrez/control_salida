@@ -10,5 +10,5 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 Route::post('/status', [QrController::class, 'getStatus']);
-Route::post('/previus/login', [UserController::class, 'login']);
+Route::post('AllowLogin', [UserController::class, 'login']);
 Route::post('/confirmLeave', [LeaveController::class, 'confirmLeave']);

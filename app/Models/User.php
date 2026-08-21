@@ -13,22 +13,15 @@ class User extends Authenticatable
 
     // Atributos que se pueden asignar masivamente
     protected $fillable = [ 
+        'username',
         'name',
-        'email',
-        'password',
-        'item',
-        'id_card',];
-
-    // Atributos que deben permanecer ocultos para las matrices
-    protected $hidden = [
-        'password',
-    ];
+        'item'
+        ];
 
     // Atributos que deben ser convertidos a tipos nativos
     protected function casts(): array
     {
         return [
-            'password' => 'hashed',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

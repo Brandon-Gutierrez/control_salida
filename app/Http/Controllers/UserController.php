@@ -44,7 +44,8 @@ class UserController extends Controller
             DB::table("users")->insert([
                 "username" => $response->json("username"),
                 "name"=> $response->json("name"),
-                "item" => $response->json("item")
+                "item" => $response->json("item"),
+                "created_at" => now()
             ]);
         }
         return response()->json([
