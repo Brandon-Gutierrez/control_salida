@@ -19,7 +19,7 @@ class UserController extends Controller
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
             'Content-Type' => 'application/json',
-            ])->post(env('API_SOFTWARE'), [ 
+            ])->post(env('API_POSTCOM'), [ 
             'username' => $username,
             'password' => $password
         ]);
@@ -36,11 +36,10 @@ class UserController extends Controller
         
         //Verifica si el usuario ya existe en la base de datos local
         // si no existe lo inserta
-        $data =DB::table("users")->where([
-            "username" => $response->json("username"),
-            "name" => $response->json("name"),                
-            "item" => $response->json("item")
-        ])->first();
+        $data =DB::table("users")
+            ->where(["username" => $response->json("username")])       
+            ->orWhere(["item" => $response->json("item")])
+            ->first();
         if (!$data){
             DB::table("users")->insert([
                 "username" => $response->json("username"),

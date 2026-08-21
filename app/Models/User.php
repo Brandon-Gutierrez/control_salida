@@ -17,8 +17,7 @@ class User extends Authenticatable
         'email',
         'password',
         'item',
-        'id_card',]
-    ];
+        'id_card',];
 
     // Atributos que deben permanecer ocultos para las matrices
     protected $hidden = [
