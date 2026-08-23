@@ -6,4 +6,3 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return view('welcome');
 });
-Route::get('/generate-qr', [QrController::class, 'generateDynamicQr']);
