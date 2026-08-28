@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\LeavePremise;
 
 class Leave extends Model
 {
@@ -13,11 +14,18 @@ class Leave extends Model
     protected $fillable = [
         'reason',
     ];
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
 
-    // Relación muchos a muchos con el modelo User
-    public function users()
+    // Relación muchos a muchos con el modelo premise
+    public function premise()
     {
-        return $this->belongsToMany(User::class, 'leave_user', 'leave_id', 'user_id')
-                    ->withPivot('leave_time', 'return_time');
+        return $this->belongsToMany(Premise::class)
+        ->using(LeavePremise::class)
+        ->withTimestamps()
+        ->withSoftDeleted(true);
     }
 }

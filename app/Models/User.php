@@ -24,12 +24,14 @@ class User extends Authenticatable
         return [
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
+            'deleted_at' => 'datetime',
         ];
     }
     //Relación muchos a muchos con el modelo Leave
-    public function leaves()
+    public function leave_premise()
     {
-        return $this->belongsToMany(Leave::class, 'leave_user', 'user_id', 'leave_id')
-                    ->withPivot('leave_time', 'return_time'); 
+        return $this->belongsToMany(Leave::class)
+            ->using(Record::class)
+            ->withPivot('leave_time', 'return_time'); 
     }
 }

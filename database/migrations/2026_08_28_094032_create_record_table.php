@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('record', function (Blueprint $table) {
+        Schema::create('records', function (Blueprint $table) {
             $table->id();
             $table->dateTime('leave_time')->nullable(false); //fecha y hora de salida
             $table->dateTime('return_time')->nullable(true); //fecha y hora de retorno

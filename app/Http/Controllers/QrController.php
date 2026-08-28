@@ -14,7 +14,11 @@ class QrController extends Controller
         $token = 'qr_comteco' . Str::uuid();
 
         Redis::setex($token, 60, 'qr_libre');
-        return response()->json(['token' => $token, 'TTL' => 60, 'status' => 'qr_libre'], 200); 
+        return response()->json([
+            'token' => $token,
+            'TTL' => 60,
+            'status' => 'qr_libre'],
+            200); 
     } //falta retornar error
 
     public function getStatus(Request $request)
