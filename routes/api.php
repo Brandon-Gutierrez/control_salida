@@ -10,6 +10,9 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 Route::post('/status', [QrController::class, 'getStatus']);
+
 Route::post('/allowLogin', [UserController::class, 'login']);
+Route::post('/allowGet', [UserController::class, 'getUser']);
+
 Route::post('/confirmLeave', [LeaveController::class, 'confirmLeave']);
 Route::get('/generate-qr', [QrController::class, 'generateDynamicQr']);

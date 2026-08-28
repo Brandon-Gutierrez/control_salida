@@ -11,11 +11,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('leaves', function (Blueprint $table) {
+        Schema::create('premises', function (Blueprint $table) {
             $table->id();
-            $table->string('reason'); //motivo de salida
+            $table->string('name');
             $table->timestamps();
-            $table->softdeletes();
+            $table->softDeletes();
+            $table->foreignId('user_id')  //llave foranea a la tabla user
+                  ->nullable(false)
+                  ->constrained()
+                  ->onDelete('cascade');
         });
     }
 
@@ -24,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('leaves');
+        Schema::dropIfExists('premises');
     }
 };

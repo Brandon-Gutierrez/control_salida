@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('name');
             $table->integer('item')->unique(); //Item corporativo del usuario
             $table->timestamps();
+            $table->softdeletes();
         });
     }
 
