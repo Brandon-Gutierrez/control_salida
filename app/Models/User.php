@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -27,11 +26,15 @@ class User extends Authenticatable
             'deleted_at' => 'datetime',
         ];
     }
-    //Relación muchos a muchos con el modelo Leave
-    public function leave_premise()
+    //Relación muchos a muchos con el modelo LeavePremise
+    public function records()
     {
-        return $this->belongsToMany(Leave::class)
-            ->using(Record::class)
-            ->withPivot('leave_time', 'return_time'); 
+        return $this->hasMany(Record::class);
+    }
+    public function leavePremise()
+    {
+        return $this->belongsToMany(LeavePremise::class, 'records')
+        ->using(Record::class)
+        ->withPivot('leave_time', 'return_time');
     }
 }

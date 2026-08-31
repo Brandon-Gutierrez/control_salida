@@ -2,17 +2,25 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Carbon;
+use App\Repositories\UserRepository;
+use Illuminate\Http\JsonResponse;
 
 
 class UserController extends Controller
 {
-    public function login(Request $request)
+    protected UserRepository $userRepository;
+    public function __construct(UserRepository $userRepository)
     {
+        $this->userRepository = $userRepository;
+    }
+
+    public function login(Request $request) : JsonResponse
+    {
+
         $username = $request->input("username");
         $password = $request->input("password");
         
@@ -24,28 +32,20 @@ class UserController extends Controller
             'username' => $username,
             'password' => $password
         ]);
-
         //Verifica si hay un error en los datos 
-        if (!$response || $response->json("status") == 1)
+        if ($response->failed() || $response->json("status") == 1)
         {
             //retorna esetado de error
             return response()->json($response->json(), 400);
         }
+        $name = $response->json("name");
+        $item = $response->json("item");
         
-        //Verifica si el usuario ya existe en la base de datos local
-        // si no existe lo inserta
-        $data =DB::table("users")
-            ->where(["username" => $response->json("username")])       
-            ->orWhere(["item" => $response->json("item")])
-            ->first();
+        //Verifica si el usuario ya existe 
+        $data = $this->userRepository->isUserRegistered($name, $item);
         //Si no hay datos los guarda
-        if (!$data){
-            DB::table("users")->insert([
-                "username" => $response->json("username"),
-                "name"=> $response->json("name"),
-                "item" => $response->json("item"),
-                "created_at" => now()
-            ]);
+        if (!$data && $username && $name && $item){
+            $this->userRepository->registerUser($username, $name, $item);
         }
         //retorna los datos necesarios
         return response()->json([
@@ -55,7 +55,7 @@ class UserController extends Controller
             ], 200);
     }
 
-    public function getUser(Request $request)
+    public function getUserStatus(Request $request) : JsonResponse
     {
         $item = $request->input("item");
         if(!$item){
@@ -71,19 +71,15 @@ class UserController extends Controller
                 'item' => $item
             ]); 
         
-        if(!$response || $response->json("status") == 1)
+        if($response->failed() || $response->json("status") == 1)
         {
             return response()->json($response->json(), 400);
         }
 
-        $user = DB::table("users")
-            ->where('item', $item)
-            ->first();
+        $userId = $this->userRepository->getUserId($item);
 
-        $isLeave = DB::table('leave_user')
-            ->where('user_id', $user->id)
-            ->whereNull('return_time')
-            ->first();
+        $isLeave = $this->userRepository->isUserLeave($userId);
+
         if(!$isLeave){
             return response()->json([
                 "token" => $response->json("token"),
@@ -100,5 +96,4 @@ class UserController extends Controller
                 "dateLeave" => $isLeave->leave_time ? Carbon::parse($isLeave->leave_time)->toIso8601String() : null,
             ], 200);
     }
-    //funcion para mostrar el estado del usuario y devolver datos de valor
 }

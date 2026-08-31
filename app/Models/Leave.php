@@ -3,13 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\LeavePremise;
 
 class Leave extends Model
 {
-    use Notifiable, HasFactory;
+    use HasFactory;
     //
     protected $fillable = [
         'reason',
@@ -21,11 +19,10 @@ class Leave extends Model
     ];
 
     // Relación muchos a muchos con el modelo premise
-    public function premise()
+    public function premises()
     {
-        return $this->belongsToMany(Premise::class)
+        return $this->belongsToMany(Premise::class, 'leave_premise')
         ->using(LeavePremise::class)
-        ->withTimestamps()
-        ->withSoftDeleted(true);
+        ->withTimestamps();
     }
 }

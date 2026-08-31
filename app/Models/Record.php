@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
-class Record extends Model
+class Record extends Pivot
 {
+    protected $table = "records";
+
     protected $fillable = [
         'leave_time',
         'return_time',
@@ -13,9 +15,12 @@ class Record extends Model
         'leave_premise_id',
     ];
 
-    public function user(){
-        return $this->belongsToMany(User::class)
-        ->using(Record::class)
-        ->withPivot('leave_time', 'return_time');
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+    public function leavePremise()
+    {
+        return $this->belongsTo(LeavePremise::class, 'leave_premise_id');
     }
 }

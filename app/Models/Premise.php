@@ -3,12 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Models\LeavePremise;
 
 class Premise extends Model
 {
     protected $fillable = [
         'name',
+        'user_id',
     ];
 
     protected $casts =[
@@ -17,11 +17,11 @@ class Premise extends Model
         'deleted_at' => 'datetime',  
     ];
 
-    public function leave()
+    public function leaves()
     {
-        return $this->belongsToMany(Leave::class)
+        return $this->belongsToMany(Leave::class, 'leave_premise')
         ->using(LeavePremise::class)
-        ->withTimestamps(true);
+        ->withTimestamps();
     }
     public function user(){
         return $this->belongsTo(User::class);
