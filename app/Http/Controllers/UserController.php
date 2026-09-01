@@ -61,7 +61,7 @@ class UserController extends Controller
         if(!$item){
             return response()->json([
                 "status" => 0,
-                "message" => "No se puedo realizar la conexión"
+                "message" => "No se puede realizar la conexión"
             ], 400);
         }
         $response = Http::withHeaders([
@@ -73,13 +73,13 @@ class UserController extends Controller
         
         if($response->failed() || $response->json("status") == 1)
         {
-            return response()->json($response->json(), 400);
+            return response()->json($response->json() ?? ["status" => 1, "message" => "Error externo"], 400);
         }
 
         $userId = $this->userRepository->getUserId($item);
 
         $isLeave = $this->userRepository->isUserLeave($userId);
-
+        $leaveTime = $isLeave?->leave_time ?? $isLeave?->pivot?->leave_time;
         if(!$isLeave){
             return response()->json([
                 "token" => $response->json("token"),
@@ -93,7 +93,7 @@ class UserController extends Controller
                 "item" => $response->json("item"),
                 "name" => $response->json("name"),
                 "isLeave" => true,
-                "dateLeave" => $isLeave->leave_time ? Carbon::parse($isLeave->leave_time)->toIso8601String() : null,
+                "dateLeave" => $leaveTime ? Carbon::parse($isLeave->leave_time)->toIso8601String() : null,
             ], 200);
     }
 }

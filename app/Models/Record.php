@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
 
 class Record extends Pivot
 {
-    protected $table = "records";
+    protected $table = 'records';
+
+    public $timestamps = false;
 
     protected $fillable = [
         'leave_time',

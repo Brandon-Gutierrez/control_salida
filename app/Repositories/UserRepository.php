@@ -9,7 +9,7 @@ use App\Models\Record;
 class UserRepository
 {
     //Obtener el id del usuario
-    public function getUserId(String $item)
+    public function getUserId(String $item) : ?int
     {
         return User::where('item', $item)->value('id');
     }
@@ -37,22 +37,23 @@ class UserRepository
     {
         return Record::where('user_id', $userId)
             ->whereNull('return_time')
-            ->latest()
+            ->latest('leave_time')
             ->first();
     }
     //Obtener si el usuario ya esta registrado
-    public function isUserRegistered(?String $username, ?String $item) : ?User
+    public function isUserRegistered(?String $name, ?String $item) : ?User
     {
-        if (!$username && !$item) return null;
-        return User::where('username', $username)
-            ->orwhere('item', $item)
+        if (!$name && !$item) return null;
+        return User::where([
+            'name'=> $name,
+            'item' => $item])
             ->first();
     } 
 
     //Registrar usuario
     public function registerUser(String $username, String $name, String $item) : User
     {
-        return User::create([
+        return User::firstOrCreate([
             'username'=> $username,
             'name'=> $name,
             'item'=> $item,

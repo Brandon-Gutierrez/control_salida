@@ -2,21 +2,28 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use App\Repositories\UserRepository;
 
 class QrController extends Controller
 {
-    public function generateDynamicQr()
+    protected UserRepository $userRepository;
+    public function __construct(UserRepository $userRepository)
     {
-        $token = 'qr_comteco' . Str::uuid();
+        $this->userRepository = $userRepository;
+    }
 
-        Redis::setex($token, 60, 'qr_libre');
+    public function generateDynamicQr(Request $request)
+    {
+        $premiseName = $request->query("name");
+        $token = $premiseName . Str::uuid();
+
+        Redis::setex($token, 60000, 'qr_libre');
         return response()->json([
             'token' => $token,
-            'TTL' => 60,
+            'TTL' => 60000,
             'status' => 'qr_libre'],
             200); 
     } //falta retornar error
@@ -24,18 +31,17 @@ class QrController extends Controller
     public function getStatus(Request $request)
     {
         $token = $request->input('token');
-        $userToken = $request->input('userToken');
         $item = $request->input('item');
         $qrStatus = Redis::get($token);
 
         //Validar en redis
-        if(!$qrStatus || $qrStatus !== 'qr_libre') {
+        if(!$qrStatus) {
             return response()->json([
-                'status' => 'ERROR',
+                'status' => 1,
                 'message' => 'QR invalido o ya escaneado'
                 ], 400);
         }
-        Redis::setex($token, 180, 'qr_en_uso');
+        //Redis::setex($token, 180, 'qr_en_uso');
         
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
@@ -43,42 +49,36 @@ class QrController extends Controller
                 'item' => $item
             ]); 
 
-        if(!$response || $response->json("status") == 1 || $userToken !== $response->json("token"))
+        if(!$response || $response->json('status') == 1)
         {
             return response()->json([
-                "status" => "ERROR",
+                "status" => 1,
                 "message" => "Usuario no identificado, intentelo nuevamente",
+                "data" => $response->json(),
             ], 400);
         }
         
-        $user = DB::table("users")
-            ->where('item', $item)
-            ->first();
+        $userId = $this->userRepository->getUserId($item);
         //Verifica si el usuario tiene un registro de salida sin retorno
-        $isLeave = DB::table('leave_user')
-            ->where('user_id', $user->id)
-            ->whereNull('return_time')
-            ->first();
+        $isLeave = $this->userRepository->isUserLeave($userId);
         
         //Si el usuario no tiene retorno, actualizamos el retorno
         if($isLeave)
         {
-            DB::table('leave_user')
-                ->where('id', $isLeave->id)
-                ->update([
-                    'return_time' => now()]);
+            $this->userRepository->registerReturn($userId);
 
-            Redis::del($token);
+            //Redis::del($token);
 
             return response()->json([
-                'status' => 'SUCCESS',
+                'status' => 0,
+                'action' => 'showHome',
                 'message' => 'Bienvenido de regreso, su retorno ha sido registrado correctamente'
                 ], 200);
         }
         //Sino se muestran los motivos de salida
-        Redis::expire($token, 180);
+        //Redis::expire($token, 180);
         return response()->json([
-            'status' => 'SUCCESS', 
+            'status' => 0, 
             'action' => 'showReasons', 
             'message' => 'QR escaneado correctamente'
             ], 200);

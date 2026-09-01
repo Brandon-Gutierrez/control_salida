@@ -9,6 +9,7 @@ class Leave extends Model
 {
     use HasFactory;
     //
+    protected $table = "leaves";
     protected $fillable = [
         'reason',
     ];

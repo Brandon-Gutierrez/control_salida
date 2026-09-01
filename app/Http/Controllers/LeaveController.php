@@ -54,7 +54,7 @@ class LeaveController extends Controller
             "leave_time" => now(),
         ]);
 
-        Redis::del($token);
+        //Redis::del($token);
         return response()->json([
             "status" => "SUCCESS",
             "message" => "Salida temporal registrada correctamente"
