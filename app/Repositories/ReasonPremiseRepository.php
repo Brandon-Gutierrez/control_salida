@@ -27,7 +27,7 @@ class ReasonPremiseRepository
     }
 
     //Encontrar el id de una salida de un predio
-    public function findALeavePremise(int $premiseId, String $name) : int
+    public function findAReasonPremise(int $premiseId, String $name) : int
     {
 
         $reasonId = $this->getLeaveId($name);

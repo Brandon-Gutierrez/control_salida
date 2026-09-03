@@ -18,6 +18,12 @@ class UserController extends Controller
         $this->userRepository = $userRepository;
     }
 
+    public function loginAdmin (Request $request)
+    {
+        $username = $request->input("usernaname");
+        $password = $request->input("password");
+    }
+
     public function login(Request $request) : JsonResponse
     {
 
@@ -49,7 +55,6 @@ class UserController extends Controller
         }
         //retorna los datos necesarios
         return response()->json([
-            "token" => $response->json("token"),
             "item" => $response->json("item"),
             "name" => $response->json("name"),
             ], 200);
@@ -60,7 +65,7 @@ class UserController extends Controller
         $item = $request->input("item");
         if(!$item){
             return response()->json([
-                "status" => 0,
+                "status" => 1,
                 "message" => "No se puede realizar la conexión"
             ], 400);
         }
@@ -79,17 +84,17 @@ class UserController extends Controller
         $userId = $this->userRepository->getUserId($item);
 
         $isLeave = $this->userRepository->isUserLeave($userId);
+
         $leaveTime = $isLeave?->leave_time ?? $isLeave?->pivot?->leave_time;
+        
         if(!$isLeave){
             return response()->json([
-                "token" => $response->json("token"),
                 "item" => $response->json("item"),
                 "name" => $response->json("name"),
                 "isLeave" => false,
             ], 200);
         }
         return response()->json([
-                "token" => $response->json("token"),
                 "item" => $response->json("item"),
                 "name" => $response->json("name"),
                 "isLeave" => true,

@@ -19,20 +19,28 @@ class QrController extends Controller
     {
         $premiseName = $request->query("name");
         $token = $premiseName . Str::uuid();
+        $TTL = 60000;
 
-        Redis::setex($token, 60000, 'qr_libre');
+        Redis::setex($token, $TTL, $premiseName);
+        if (Redis::get($token))
+        {
+            return response()->json([
+                'status' => 1,
+                'message' => 'Error al generar token del qr'
+            ], 400);
+        }
         return response()->json([
+            'status' => 0,
             'token' => $token,
-            'TTL' => 60000,
-            'status' => 'qr_libre'],
-            200); 
-    } //falta retornar error
+            'TTL' => $TTL,
+            ], 200); 
+    }
 
     public function getStatus(Request $request)
     {
-        $token = $request->input('token');
+        $qrData = $request->input('qrData');
         $item = $request->input('item');
-        $qrStatus = Redis::get($token);
+        $qrStatus = Redis::get($qrData);
 
         //Validar en redis
         if(!$qrStatus) {
@@ -41,7 +49,6 @@ class QrController extends Controller
                 'message' => 'QR invalido o ya escaneado'
                 ], 400);
         }
-        //Redis::setex($token, 180, 'qr_en_uso');
         
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
@@ -67,8 +74,6 @@ class QrController extends Controller
         {
             $this->userRepository->registerReturn($userId);
 
-            //Redis::del($token);
-
             return response()->json([
                 'status' => 0,
                 'action' => 'showHome',
@@ -76,10 +81,10 @@ class QrController extends Controller
                 ], 200);
         }
         //Sino se muestran los motivos de salida
-        //Redis::expire($token, 180);
         return response()->json([
             'status' => 0, 
             'action' => 'showReasons', 
+            'qrData' => $qrData,
             'message' => 'QR escaneado correctamente'
             ], 200);
     }

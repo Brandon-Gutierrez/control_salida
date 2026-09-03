@@ -4,20 +4,20 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use App\Repositories\LeavePremiseRepository;
+use App\Repositories\ReasonPremiseRepository;
 use App\Repositories\UserRepository;
 
 
 class LeaveController extends Controller
 {
     //constructor 
-    protected LeavePremiseRepository $leavePremiseRepository;
-      protected UserRepository $userRepository;
-    public function __construct(LeavePremiseRepository $leavePremiseRepository, UserRepository $userRepository)
+    protected ReasonPremiseRepository $reasonPremiseRepository;
+    protected UserRepository $userRepository;
+    
+    public function __construct(ReasonPremiseRepository $reasonPremiseRepository, UserRepository $userRepository)
     {
-        $this->leavePremiseRepository = $leavePremiseRepository;
+        $this->reasonPremiseRepository = $reasonPremiseRepository;
         $this->userRepository = $userRepository;
     }
 
@@ -26,7 +26,7 @@ class LeaveController extends Controller
     public function getLeavesOfPremise(Request $request)
     {
         $premiseId = $request->integer("premise");
-        $data = $this->leavePremiseRepository->getLeaves($premiseId);
+        $data = $this->reasonPremiseRepository->getLeavesofPremise($premiseId);
         return response()->json(['reasons' => $data], 200);
     }
 
@@ -36,14 +36,14 @@ class LeaveController extends Controller
         $qrData = $request->input("qrData");
         $item = $request->input("item");
         $premise = $request->input("premise");
-        $reason = $request->input("reason");
+        $name = $request->input("name");
         $qrStatus = Redis::get($qrData);
 
         //Validar en redis
         if(!$qrStatus)
         {
             return response()->json([
-                "status" => "ERROR",
+                "status" => 1,
                 "message" => "Tiempo de espera del QR expirado"
             ], 400);
         }
@@ -57,7 +57,7 @@ class LeaveController extends Controller
         if(!$response || $response->json("status") == 1)
         {
             return response()->json([
-                "status" => "ERROR",
+                "status" => 1,
                 "message" => "Usuario no identificado, intentelo nuevamente",
             ], 400);
         }
@@ -65,14 +65,20 @@ class LeaveController extends Controller
         //Obtener el id del usuario en la base de datos local
         $userId = $this->userRepository->getUserId($item);
 
-        $leave_premise_id = $this->leavePremiseRepository->findALeavePremise($premise, $reason);
+        $reason_premise_id = $this->reasonPremiseRepository->findAreasonPremise($premise, $name);
 
         //Registrar la salida temporal del usuario
-        $this->userRepository->registerLeave($userId, $leave_premise_id);
-
+        $isLeaveRegistered = $this->userRepository->registerLeave($userId, $reason_premise_id);
+        if(!$isLeaveRegistered)
+        {
+            return response()->json([
+                "status" => 1,
+                "message" => "Error al registrar la salida temporal"
+            ], 400);
+        }
         //Redis::del($token);
         return response()->json([
-            "status" => "SUCCESS",
+            "status" => 0,
             "message" => "Salida temporal registrada correctamente"
         ]);
     }
