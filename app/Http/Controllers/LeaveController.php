@@ -6,18 +6,38 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use App\Repositories\LeavePremiseRepository;
+use App\Repositories\UserRepository;
 
 
 class LeaveController extends Controller
 {
+    //constructor 
+    protected LeavePremiseRepository $leavePremiseRepository;
+      protected UserRepository $userRepository;
+    public function __construct(LeavePremiseRepository $leavePremiseRepository, UserRepository $userRepository)
+    {
+        $this->leavePremiseRepository = $leavePremiseRepository;
+        $this->userRepository = $userRepository;
+    }
+
+
+    //Obtener las salidas de un predio
+    public function getLeavesOfPremise(Request $request)
+    {
+        $premiseId = $request->integer("premise");
+        $data = $this->leavePremiseRepository->getLeaves($premiseId);
+        return response()->json(['reasons' => $data], 200);
+    }
+
     //Confirmar la salida de un usuario
     public function confirmLeave(Request $request)
     {
-        $token = $request->input("token");
+        $qrData = $request->input("qrData");
         $item = $request->input("item");
-        $userToken = $request->input("userToken");
+        $premise = $request->input("premise");
         $reason = $request->input("reason");
-        $qrStatus = Redis::get($token);
+        $qrStatus = Redis::get($qrData);
 
         //Validar en redis
         if(!$qrStatus)
@@ -34,7 +54,7 @@ class LeaveController extends Controller
                 'item' => $item
             ]); 
 
-        if(!$response || $response->json("status") == 1 || $userToken !== $response->json("token"))
+        if(!$response || $response->json("status") == 1)
         {
             return response()->json([
                 "status" => "ERROR",
@@ -43,16 +63,12 @@ class LeaveController extends Controller
         }
         
         //Obtener el id del usuario en la base de datos local
-        $userId = DB::table("users")
-            ->where("item", $item)
-            ->first();
-        
+        $userId = $this->userRepository->getUserId($item);
+
+        $leave_premise_id = $this->leavePremiseRepository->findALeavePremise($premise, $reason);
+
         //Registrar la salida temporal del usuario
-        DB::table("leave_user")->insert([
-            "user_id" => $userId->id,
-            "leave_id" => $reason,
-            "leave_time" => now(),
-        ]);
+        $this->userRepository->registerLeave($userId, $leave_premise_id);
 
         //Redis::del($token);
         return response()->json([

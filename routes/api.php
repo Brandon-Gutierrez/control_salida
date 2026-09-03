@@ -14,5 +14,6 @@ Route::post('/status', [QrController::class, 'getStatus']);
 Route::post('/allowLogin', [UserController::class, 'login']);
 Route::post('/allowGet', [UserController::class, 'getUserStatus']);
 
-Route::post('/confirmLeave', [LeaveController::class, 'confirmLeave']);
 Route::get('/generate-qr', [QrController::class, 'generateDynamicQr']);
+Route::post('/confirmLeave', [LeaveController::class, 'confirmLeave']);
+Route::get('/leaves', [LeaveController::class, 'getLeavesOfPremise']);
