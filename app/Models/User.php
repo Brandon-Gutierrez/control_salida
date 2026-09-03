@@ -15,9 +15,9 @@ class User extends Authenticatable
     protected $fillable = [ 
         'username',
         'name',
-        'item'
+        'item',
+        'rol_id'
         ];
-
     // Atributos que deben ser convertidos a tipos nativos
     protected function casts(): array
     {
@@ -34,8 +34,12 @@ class User extends Authenticatable
     }
     public function leavePremise()
     {
-        return $this->belongsToMany(LeavePremise::class, 'records')
+        return $this->belongsToMany(ReasonPremise::class, 'records')
         ->using(Record::class)
         ->withPivot('leave_time', 'return_time');
+    }
+    public function role()
+    {
+        return $this->belongsTo(Role::class);
     }
 }

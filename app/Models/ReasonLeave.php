@@ -5,13 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Leave extends Model
+class ReasonLeave extends Model
 {
     use HasFactory;
     //
-    protected $table = "leaves";
+    protected $table = "reason_leaves";
     protected $fillable = [
-        'reason',
+        'name',
     ];
     protected $casts = [
         'created_at' => 'datetime',
@@ -22,8 +22,8 @@ class Leave extends Model
     // Relación muchos a muchos con el modelo premise
     public function premises()
     {
-        return $this->belongsToMany(Premise::class, 'leave_premise')
-        ->using(LeavePremise::class)
+        return $this->belongsToMany(Premise::class, 'reason_premise')
+        ->using(ReasonPremise::class)
         ->withTimestamps();
     }
 }

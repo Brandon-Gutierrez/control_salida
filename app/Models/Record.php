@@ -14,7 +14,7 @@ class Record extends Pivot
         'leave_time',
         'return_time',
         'user_id',
-        'leave_premise_id',
+        'reason_premise_id',
     ];
 
     public function user()
@@ -23,6 +23,6 @@ class Record extends Pivot
     }
     public function leavePremise()
     {
-        return $this->belongsTo(LeavePremise::class, 'leave_premise_id');
+        return $this->belongsTo(ReasonPremise::class, 'leave_premise_id');
     }
 }

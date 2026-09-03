@@ -5,14 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class LeavePremise extends Pivot
+class ReasonPremise extends Pivot
 {
     use HasFactory;
-    protected $table = 'leave_premise';
+    protected $table = 'reason_premise';
 
     // Atributos que se pueden asignar masivamente
     protected $fillable = [
-        'leave_id',
+        'reason_id',
         'premise_id',
     ];
 
@@ -25,7 +25,7 @@ class LeavePremise extends Pivot
 
     public function leave()
     {
-        return $this->belongsTo(Leave::class);
+        return $this->belongsTo(ReasonLeave::class);
     }
 
     public function premise()
