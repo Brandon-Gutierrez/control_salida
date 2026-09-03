@@ -8,28 +8,20 @@ use App\Models\Record;
 
 class UserRepository
 {
-    //Obtener el id del usuario
+    //Obtener el id del usuario mediante el item
     public function getUserId(String $item) : ?int
     {
         return User::where('item', $item)->value('id');
     }
 
-    //Obtener de que garita es responsable el usuario
-    public function getPremiseResponsible(String $item)
-    {
-        $userId = $this->getUserId($item);
-        if (!$userId) return null;
-        return Premise::where('user_id', $userId)
-            ->first('id', 'name');
-    }
-
-    //Verifica si el usuario es un responsable de un predio
-    public function isUserResponsible(String $item) : bool
+    //Verifica si el usuario es admin
+    public function isUserAdmin(String $item) : bool
     {
         $userId = $this->getUserId($item);
         if (!$userId) return false;
-        return Premise::where('user_id', $userId)
-            ->exists();
+        $isAdmin = User::where('id', $userId)->value(2);
+        if (!$isAdmin) return false;
+        return true;
     }
 
     //Obtner si el usuario esta con salida marcada
@@ -62,13 +54,13 @@ class UserRepository
     }
 
     //Registrar la salida temporal del usuario
-    public function registerLeave(int $userId, int $leave_premise_id) : Record
+    public function registerLeave(int $userId, int $reason_premise_id) : Record
     {
         return Record::create([
             'leave_time'=> now(),
             'return_time'=> null,
             'user_id'=> $userId,
-            'leave_premise_id'=> $leave_premise_id,
+            'reason_premise_id'=> $reason_premise_id,
         ]);
     }
 
@@ -76,8 +68,8 @@ class UserRepository
     public function registerReturn(int $userId) : int
     {
         return Record::where('user_id', $userId)
-        ->whereNull('return_time')
-        ->update([
+            ->whereNull('return_time')
+            ->update([
             'return_time'=> now(),
         ]);
     }

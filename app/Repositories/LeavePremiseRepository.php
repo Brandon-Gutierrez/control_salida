@@ -1,38 +1,40 @@
 <?php 
 namespace App\Repositories;
 
-use App\Models\LeavePremise;
-use App\Models\Leave;
+use App\Models\ReasonPremise;
+use App\Models\ReasonLeave;
 
-class LeavePremiseRepository
+class ReasonPremiseRepository
 {
-
     //Obtener las salidas de un predio
-    public function getLeaves(int $premiseId)
+    public function getLeavesofPremise(int $premiseId)
     {
-        $leavesId = LeavePremise::where('premise_id', $premiseId)
+        $leavesId = ReasonPremise::where('premise_id', $premiseId)
             ->pluck('leave_id');
         
-        $reasons = Leave::whereIn('id', $leavesId)
-            ->pluck('reason');
+        $reasons = ReasonLeave::whereIn('id', $leavesId)
+            ->pluck('name');
 
         return $reasons;
     }
 
-    public function getLeaveId(String $reason) : int
+    //Obtener el id de una razón de salida
+    public function getLeaveId(String $name) : int
     {
-        $leaveId = Leave::where('reason', $reason)
+        $reasonId = ReasonLeave::where('name', $name)
             ->value('id');
-        return $leaveId;
+        return $reasonId;
     }
-    public function findALeavePremise(int $premiseId, String $reason) : int
+
+    //Encontrar el id de una salida de un predio
+    public function findALeavePremise(int $premiseId, String $name) : int
     {
 
-        $leaveId = $this->getLeaveId($reason);
-        $leavePremise = LeavePremise::where([
+        $reasonId = $this->getLeaveId($name);
+        $reasonPremise = ReasonPremise::where([
             'premise_id' => $premiseId,
-            'leave_id' => $leaveId,
+            'reason_id' => $reasonId,
             ])->value('id');
-        return $leavePremise;
+        return $reasonPremise;
     }
 }

@@ -19,7 +19,7 @@ class Premise extends Model
 
     public function leaves()
     {
-        return $this->belongsToMany(Leave::class, 'reason_premise')
+        return $this->belongsToMany(ReasonLeave::class, 'reason_premise')
         ->using(ReasonPremise::class)
         ->withTimestamps();
     }
