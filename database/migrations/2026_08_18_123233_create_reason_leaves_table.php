@@ -11,11 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('premises', function (Blueprint $table) {
+        Schema::create('reason_leaves', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
+            $table->string('name'); //motivo de salida
             $table->timestamps();
-            $table->softDeletes();
+            $table->softdeletes();
         });
     }
 
@@ -24,6 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('premises');
+        Schema::dropIfExists('reason_leaves');
     }
 };

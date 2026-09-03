@@ -16,6 +16,11 @@ return new class extends Migration
             $table->string('username')->unique();
             $table->string('name');
             $table->integer('item')->unique(); //Item corporativo del usuario
+            $table->foreignId('rol_id')  //llave foranea a la tabla premise
+                  ->default(1) 
+                  ->nullable(false)
+                  ->constrained('roles')
+                  ->onDelete('cascade');
             $table->timestamps();
             $table->softdeletes();
         });

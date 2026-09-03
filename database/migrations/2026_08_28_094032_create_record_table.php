@@ -19,9 +19,9 @@ return new class extends Migration
                   ->nullable(false) 
                   ->constrained()    
                   ->onDelete('cascade'); 
-            $table->foreignId('leave_premise_id')  //llave foranea a la tabla auxiliar
+            $table->foreignId('reason_premise_id')  //llave foranea a la tabla auxiliar
                   ->nullable(false)
-                  ->constrained('leave_premise')
+                  ->constrained('reason_premise')
                   ->onDelete('cascade');
         });
     }

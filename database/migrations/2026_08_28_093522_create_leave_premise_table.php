@@ -11,18 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('leave_premise', function (Blueprint $table) {
+        Schema::create('reason_premise', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
-            $table->softDeletes();
-            $table->foreignId('leave_id')  //llave foranea a la tabla leaves
+            $table->foreignId('reason_id')  //llave foranea a la tabla
                   ->nullable(false)
-                  ->constrained()
+                  ->constrained('reason_leaves')
                   ->onDelete('cascade');
             $table->foreignId('premise_id')  //llave foranea a la tabla premise
                   ->nullable(false)
                   ->constrained()
                   ->onDelete('cascade');
+            $table->timestamps();
+            $table->softDeletes();
         });
     }
 
