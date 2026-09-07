@@ -12,6 +12,7 @@ class ReasonLeave extends Model
     protected $table = "reason_leaves";
     protected $fillable = [
         'name',
+        'code',
     ];
     protected $casts = [
         'created_at' => 'datetime',

@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('reason_leaves', function (Blueprint $table) {
             $table->id();
             $table->string('name'); //motivo de salida
+            $table->string('code')->unique();;
             $table->timestamps();
             $table->softdeletes();
         });

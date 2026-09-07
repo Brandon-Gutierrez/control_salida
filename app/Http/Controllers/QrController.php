@@ -6,23 +6,38 @@ use Illuminate\Support\Facades\Redis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use App\Repositories\UserRepository;
+use App\Repositories\PremiseRepository;
 
 class QrController extends Controller
 {
     protected UserRepository $userRepository;
-    public function __construct(UserRepository $userRepository)
+    protected PremiseRepository $premiseRepository;
+
+    public function __construct(UserRepository $userRepository, PremiseRepository $premiseRepository)
     {
         $this->userRepository = $userRepository;
+        $this->premiseRepository = $premiseRepository;
     }
 
     public function generateDynamicQr(Request $request)
     {
         $premiseName = $request->query("name");
-        $token = $premiseName . Str::uuid();
+        $premiseId = $this->premiseRepository->getPremiseId($premiseName);
+
+        if (!$premiseId)
+        {
+            return response()->json([
+                "error" => 0,
+                "message" => "Predio no encontrado",
+            ], 400);
+        }
+        $token = $premiseName .'+'. Str::uuid();
         $TTL = 60000;
 
-        Redis::setex($token, $TTL, $premiseName);
-        if (Redis::get($token))
+        Redis::setex($token, $TTL, $premiseId);
+        $isStorage = Redis::get($token);
+
+        if (!$isStorage)
         {
             return response()->json([
                 'status' => 1,
@@ -36,7 +51,7 @@ class QrController extends Controller
             ], 200); 
     }
 
-    public function getStatus(Request $request)
+    public function fetchUserStatusBeforeQr(Request $request)
     {
         $qrData = $request->input('qrData');
         $item = $request->input('item');
@@ -46,7 +61,7 @@ class QrController extends Controller
         if(!$qrStatus) {
             return response()->json([
                 'status' => 1,
-                'message' => 'QR invalido o ya escaneado'
+                'message' => 'QR invalido o vencido'
                 ], 400);
         }
         
@@ -56,6 +71,7 @@ class QrController extends Controller
                 'item' => $item
             ]); 
 
+        //Si el usuario no esta identificado
         if(!$response || $response->json('status') == 1)
         {
             return response()->json([

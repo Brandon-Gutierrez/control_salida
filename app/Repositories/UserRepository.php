@@ -18,8 +18,12 @@ class UserRepository
     public function isUserAdmin(String $item) : bool
     {
         $userId = $this->getUserId($item);
+
         if (!$userId) return false;
-        $isAdmin = User::where('id', $userId)->value(2);
+        $isAdmin = User::where([
+            'id'=> $userId,
+            'rol_id' => 2,
+        ])->first();
         if (!$isAdmin) return false;
         return true;
     }
