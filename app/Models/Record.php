@@ -21,8 +21,8 @@ class Record extends Pivot
     {
         return $this->belongsTo(User::class);
     }
-    public function leavePremise()
+    public function reasonPremise()
     {
-        return $this->belongsTo(ReasonPremise::class, 'leave_premise_id');
+        return $this->belongsTo(ReasonPremise::class, 'reason_premise_id');
     }
 }

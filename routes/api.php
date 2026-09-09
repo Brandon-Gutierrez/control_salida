@@ -23,11 +23,11 @@ Route::post('/confirmLeave', [LeaveController::class, 'confirmLeave']);
 
 Route::get('/reasons', [LeaveController::class, 'getReasonsOfPremise']);
 
-ROUTE::get('/fetchReasons', [LeaveController::class, 'fetchReasons']);
+ROUTE::get('/updateReasons', [LeaveController::class, 'updateReasons']); // $namePremise=
 
-//Route::get('/reasons', [PremiseController::class, 'getReasons']);
+Route::get('/allReasons', [PremiseController::class, 'getAllReasons']);
+Route::get('/premisesWithReasons', [PremiseController::class, 'index']);
 
-    // Gestión de predioss
-    Route::get('/premises', [PremiseController::class, 'index']);
-    Route::post('/premises', [PremiseController::class, 'store']);
-    Route::put('/premises/{id}/reasons', [PremiseController::class, 'updateReasons']);
+
+Route::post('/createPremises', [PremiseController::class, 'store']);
+Route::put('/premises/{id}/reasons', [PremiseController::class, 'updateReasons']);

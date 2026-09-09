@@ -23,51 +23,22 @@ class PremiseController extends Controller
         $premises = $this->premiseRepository->getAllWithReasons();
 
         return response()->json([
-            'data' => $premises,
-        ], Response::HTTP_OK);
+            "status" => 0,
+            "data" => $premises,
+        ], 200);
     }
 
     /**
      * Obtiene el catálogo completo de motivos de salida.
      */
-    public function getReasons(): JsonResponse
+    public function getAllReasons(): JsonResponse
     {
-        $reasons = ReasonLeave::all();
+        $reasons = ReasonLeave::all()->pluck("name");
 
-        return response()->json($reasons, Response::HTTP_OK);
+        return response()->json([
+            "status" => 0,
+            "reasons" => $reasons
+        ], 200);
     }
-
-    /**
-     * Registra un nuevo predio y asocia sus motivos de salida.
-     */
-    public function store(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'reason_ids' => 'required|array',
-            'reason_ids.*' => 'exists:reason_leaves,id',
-        ]);
-
-        $premise = $this->premiseRepository->create(
-            ['name' => $validated['name']],
-            $validated['reason_ids']
-        );
-
-        return response()->json($premise, Response::HTTP_CREATED);
-    }
-
-    /**
-     * Sincroniza las razones de salida asignadas a un predio.
-     */
-    public function updateReasons(Request $request, int $id): JsonResponse
-    {
-        $validated = $request->validate([
-            'reason_ids' => 'required|array',
-            'reason_ids.*' => 'exists:reason_leaves,id',
-        ]);
-
-        $premise = $this->premiseRepository->updateReasons($id, $validated['reason_ids']);
-
-        return response()->json($premise, Response::HTTP_OK);
-    }
+    
 }

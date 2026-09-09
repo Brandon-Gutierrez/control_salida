@@ -7,18 +7,22 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use App\Repositories\UserRepository;
 use App\Repositories\PremiseRepository;
+use App\Repositories\RecordRepository;
 
 class QrController extends Controller
 {
     protected UserRepository $userRepository;
     protected PremiseRepository $premiseRepository;
+    protected RecordRepository $recordRepository;
 
-    public function __construct(UserRepository $userRepository, PremiseRepository $premiseRepository)
+    public function __construct(UserRepository $userRepository, PremiseRepository $premiseRepository, RecordRepository $recordRepository)
     {
         $this->userRepository = $userRepository;
         $this->premiseRepository = $premiseRepository;
+        $this->recordRepository = $recordRepository;
     }
 
+    //Genera codigos unicos para cada predio, para la generacion de qr y la identificacion del predio
     public function generateDynamicQr(Request $request)
     {
         $premiseName = $request->query("name");
@@ -51,6 +55,7 @@ class QrController extends Controller
             ], 200); 
     }
 
+    //Validar si retorna al mismo predio
     public function fetchUserStatusBeforeQr(Request $request)
     {
         $qrData = $request->input('qrData');
@@ -88,6 +93,16 @@ class QrController extends Controller
         //Si el usuario no tiene retorno, actualizamos el retorno
         if($isLeave)
         {
+            $premiseName = str($qrData)->before('+');
+            $isSamePremise = $this->recordRepository->isSamePremise($premiseName);
+            if($isSamePremise == false)
+            {
+                return response()->json([
+                    "status" => 1,
+                    "message" => "El predio de retorno es diferente al predio de salida"
+                ], 400);
+            }
+
             $this->userRepository->registerReturn($userId);
 
             return response()->json([

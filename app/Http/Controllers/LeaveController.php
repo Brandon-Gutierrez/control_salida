@@ -28,7 +28,7 @@ class LeaveController extends Controller
         $this->premiseRepository = $premiseRepository;
     }
 
-    public function fetchReasons()
+    public function updateReasons()
     {
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
@@ -114,12 +114,12 @@ class LeaveController extends Controller
             ], 400);
         }
         
-        //Obtener el id del usuario en la base de datos local
+        //Obtener el id del usuario, el id de la raon, y el id de la premisa en la base de datos local
         $userId = $this->userRepository->getUserId($item);
-        // MANEJO DE ERRORES CUANDO ESTOS SON NULLOS O DIFERENTES
         $reasonId = $this->reasonPremiseRepository->getReasonId($nameReason);
         $premiseId = $this->premiseRepository->getPremiseId($namePremise);
 
+        //Busca el id en la tabla pivote(reason_premise)
         $reason_premise_id = $this->reasonPremiseRepository->findAReasonPremise($premiseId, $reasonId);
         if (!$reason_premise_id)
         {

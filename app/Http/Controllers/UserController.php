@@ -18,11 +18,18 @@ class UserController extends Controller
         $this->userRepository = $userRepository;
     }
 
+    //Inicio de sesion de un admin en la aplicacion web
     public function loginAdmin (Request $request)
     {
         $username = $request->input("username");
         $password = $request->input("password");
 
+        if(!$username || !$password){
+            return response()->json([
+                "status" => 1,
+                "message" => "Las credenciales no pueden ser nulas"
+            ], 400);
+        }
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
             'Content-Type' => 'application/json',
@@ -34,7 +41,10 @@ class UserController extends Controller
         if ($response->failed() || $response->json("status") == 1)
         {
             //retorna esetado de error
-            return response()->json($response->json(), 400);
+            return response()->json([
+                "status" => 1,
+                "message" => "Error en los datos ingresados"
+            ], 400);
         }
         $item = $response->json("item");
 
