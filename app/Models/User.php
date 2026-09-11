@@ -16,6 +16,7 @@ class User extends Authenticatable
         'username',
         'name',
         'item',
+        'device_id',
         'rol_id'
         ];
     // Atributos que deben ser convertidos a tipos nativos

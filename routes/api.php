@@ -7,11 +7,10 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\PremiseController;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
-
+//Route::middleware(['check.authorization', 'check.deviceid'])->group(function(){
 Route::post('/allowLogin', [UserController::class, 'login']);
+//});
+
 Route::post('/login/admin', [UserController::class, 'loginAdmin']);
 
 Route::post('/status', [QrController::class, 'fetchUserStatusBeforeQr']);

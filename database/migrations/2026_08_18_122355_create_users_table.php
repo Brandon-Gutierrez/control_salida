@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('username')->unique();
             $table->string('name');
             $table->integer('item')->unique(); //Item corporativo del usuario
+            $table->string('device_id');
             $table->foreignId('rol_id')  //llave foranea a la tabla premise
                   ->default(1) 
                   ->nullable(false)

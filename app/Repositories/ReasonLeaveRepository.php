@@ -24,4 +24,9 @@ class ReasonLeaveRepository
         }
         return $SomeNew;
     }
+    public function getCodeReason(String $nameReason): ?string
+    {
+    $codeReason = ReasonLeave::where('name', $nameReason)->value('code');
+    return $codeReason;
+    }
 }

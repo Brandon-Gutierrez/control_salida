@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Carbon;
-use App\Repositories\UserRepository;
 use Illuminate\Http\JsonResponse;
+
+use App\Repositories\UserRepository;
 
 
 class UserController extends Controller
 {
+    //Constructor de la clase UserRepository
     protected UserRepository $userRepository;
     public function __construct(UserRepository $userRepository)
     {
@@ -33,7 +35,7 @@ class UserController extends Controller
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
             'Content-Type' => 'application/json',
-            ])->post(env('API_POSTCOM'), [ 
+            ])->post(env('API_LOGIN'), [ 
             'username' => $username,
             'password' => $password
         ]);
@@ -84,7 +86,7 @@ class UserController extends Controller
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
             'Content-Type' => 'application/json',
-            ])->post(env('API_POSTCOM'), [ 
+            ])->post(env('API_LOGIN'), [ 
             'username' => $username,
             'password' => $password
         ]);
@@ -124,9 +126,68 @@ class UserController extends Controller
         if(!$item){
             return response()->json([
                 "status" => 1,
-                "message" => "No se puede realizar la conexión"
+                "message" => "No se pudo realizar la conexión"
             ], 400);
         }
+
+        //LOGICA CON API
+        
+        $date = now()->format('Y-m-d');
+        $response = Http::withHeaders([
+            'keysoftware' => env('KEY_SOFTWARE'),
+            'Content-Type' => 'application/json',
+        ])->post(env('API_GETCHECKOUT'), [
+            'in_item' => $item,
+            'in_fecha' => $date,
+        ]);
+        if($response->failed())
+        {
+            return response()->json([
+                "status" => 1,
+                 "message" => "Error externo"
+                 ], 400);
+        }
+
+        $userData = Http::withHeaders([
+            'keysoftware' => env('KEY_SOFTWARE'),
+            'Content-Type' => 'application/json',
+            ])->get(env('API_GETCOM'), [
+                'item' => $item
+            ]); 
+        //Si la solicitud devolvio error o no se proceso
+        if($userData->failed() || $userData->json("status") == 1)
+        {
+            return response()->json([
+                "status" => 1,
+                 "message" => "Error externo"
+                 ], 400);
+        }
+
+        if ($response->json('error') === -1 && empty($response->json('data')) )
+        {
+            return response()->json([
+                "name" => $userData->json("name") ?? $userData['name'],
+                "item" => $userData->json("item") ??$userData["item"],
+                "token" => $userData->json("token"),
+                "isLeave" => false,
+            ], 200);
+        }
+        //Sino
+        $data = $response->json("data");
+        $dateLeave = $data[0]['fecha_salida']
+            ? Carbon::createFromFormat('Y-m-d H:i:s', $data[0]['fecha_salida'])->toIso8601String()
+            : null;
+
+        return response()->json([
+            "name" => $userData['name'],
+            "item" => $userData["item"],
+            "token" => $userData->json("token"),
+            "isLeave" => true,
+            "dateLeave" => $dateLeave,
+        ], 200);
+        
+        // LOGICA CON BASE DE DATOS LOCAL
+        /*
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
             'Content-Type' => 'application/json',
@@ -143,6 +204,7 @@ class UserController extends Controller
         }
 
         //Obtener id del usuario mediante su item
+        
         $userId = $this->userRepository->getUserId($item);
         //Obtener si el usurio esta afuera
         $isLeave = $this->userRepository->isUserLeave($userId);
@@ -160,11 +222,13 @@ class UserController extends Controller
         }
         //Sino
         return response()->json([
-                "name" => $response->json("name"),
-                "item" => $response->json("item"),
-                "token" => $response->json("token"),
-                "isLeave" => true,
-                "dateLeave" => $leaveTime ? Carbon::parse($isLeave->leave_time)->toIso8601String() : null,
-            ], 200);
+            "name" => $response->json("name"),
+            "item" => $response->json("item"),
+            "token" => $response->json("token"),
+            "isLeave" => true,
+            "dateLeave" => $leaveTime ? Carbon::parse($isLeave->leave_time)->toIso8601String() : null,
+        ], 200);
+        */
+        // FIN LOGICA CON BASE DE DATOS LOCAL
     }
 }

@@ -19,8 +19,10 @@ class LeaveController extends Controller
     protected PremiseRepository $premiseRepository;
 
     
-    public function __construct(ReasonPremiseRepository $reasonPremiseRepository, UserRepository $userRepository,
-                                 ReasonLeaveRepository $reasonLeaveRepository, PremiseRepository $premiseRepository) 
+    public function __construct(ReasonPremiseRepository $reasonPremiseRepository,
+                                UserRepository $userRepository,
+                                ReasonLeaveRepository $reasonLeaveRepository,
+                                PremiseRepository $premiseRepository) 
     {
         $this->reasonPremiseRepository = $reasonPremiseRepository;
         $this->userRepository = $userRepository;
@@ -33,7 +35,7 @@ class LeaveController extends Controller
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
             'Content-Type' => 'application/json',
-            ])->post(env('API_REASONS'), [ 
+            ])->post(env('API_GETREASONS'), [ 
             'in_Entidad' => 'MOTIVO_SALIDA',
             'in_nombre_maq' => '',
         ]);
@@ -102,7 +104,7 @@ class LeaveController extends Controller
 
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
-            ])->get(env('API_GETCOM'), [
+            ])->get(env('API_GETEMPLOYEE'), [
                 'item' => $item
             ]); 
 
@@ -130,6 +132,29 @@ class LeaveController extends Controller
         }
 
         //Registrar la salida temporal del usuario
+        //LOGICA CON API
+        $codeReason = $this->reasonLeaveRepository->getCodeReason($nameReason);
+        $RegisteredCheckout = Http::withHeaders([
+                'keysoftware' => env('KEY_SOFTWARE'),
+                'Content-Type' => 'application/json',
+            ])->post(env('API_REGISTERCHECKOUT'), [
+                'in_item' => $item,
+                'in_motivo' => $codeReason,
+                //'in_fecha' => now()->format('Y-m-d H:i:s'),
+            ]);
+            if($RegisteredCheckout->assertStatus(200) == true)
+            {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Salida temporal registrada correctamente'
+                    ], 200);
+            }
+            return response()->json([
+                    'status' => 1,
+                    'message' => 'Error en el registro de salida temporal'
+                    ], 400);
+        //LOGICA CON BASE DE DATOS LOCAL
+        /*
         $isRegisteredLeave = $this->userRepository->registerLeave($userId, $reason_premise_id);
         if(!$isRegisteredLeave)
         {
@@ -143,5 +168,6 @@ class LeaveController extends Controller
             "status" => 0,
             "message" => "Salida temporal registrada correctamente"
         ]);
+        */
     }
 }

@@ -13,6 +13,10 @@ class UserRepository
     {
         return User::where('item', $item)->value('id');
     }
+    public function getUserData(int $userId) : User
+    {
+        return User::where('id', $userId)->first();
+    }
 
     //Verifica si el usuario es admin
     public function isUserAdmin(String $item) : bool
