@@ -12,12 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('records', function (Blueprint $table) {
-            $table->id();
+            $table->id('record_id');
             $table->dateTime('leave_time')->nullable(false); //fecha y hora de salida
             $table->dateTime('return_time')->nullable(true); //fecha y hora de retorno
             $table->foreignId('user_id') //llave foranea a la tabla users
                   ->nullable(false) 
-                  ->constrained()    
+                  ->constrained('users', 'user_id')    
                   ->onDelete('cascade'); 
             $table->foreignId('reason_premise_id')  //llave foranea a la tabla auxiliar
                   ->nullable(false)

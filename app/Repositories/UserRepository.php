@@ -3,15 +3,27 @@
 namespace App\Repositories;
 
 use App\Models\User;
-use App\Models\Premise;
 use App\Models\Record;
 
 class UserRepository
 {
-    //Obtener el id del usuario mediante el item
-    public function getUserId(String $item) : ?int
+    //Registrar usuario
+    public function registerUser(String $external_identifier, String $name, String $item) : User
     {
-        return User::where('item', $item)->value('id');
+        return User::updateOrCreate(
+            [
+            'external_identifier'=> $external_identifier,
+            ], 
+            [
+            'name'=> $name,
+            'item'=> $item,
+            ]
+        );
+    }
+    //Obtener el id del usuario mediante el item
+    public function getUserId(String $external_identifier) : ?int
+    {
+        return User::where('external_identifier', $external_identifier)->value('id');
     }
     public function getUserData(int $userId) : User
     {
@@ -26,7 +38,7 @@ class UserRepository
         if (!$userId) return false;
         $isAdmin = User::where([
             'id'=> $userId,
-            'rol_id' => 2,
+            'role_id' => 2,
         ])->first();
         if (!$isAdmin) return false;
         return true;
@@ -39,26 +51,6 @@ class UserRepository
             ->whereNull('return_time')
             ->latest('leave_time')
             ->first();
-    }
-    //Obtener si el usuario ya esta registrado
-    public function isUserRegistered(?String $name, ?String $item) : ?User
-    {
-        if (!$name && !$item) return null;
-        return User::where([
-            'name'=> $name,
-            'item' => $item])
-            ->first();
-    } 
-
-    //Registrar usuario
-    public function registerUser(String $username, String $name, String $item) : User
-    {
-        return User::firstOrCreate([
-            'username'=> $username,
-            'name'=> $name,
-            'item'=> $item,
-            'created_at'=> now(),
-        ]);
     }
 
     //Registrar la salida temporal del usuario

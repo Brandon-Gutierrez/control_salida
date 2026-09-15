@@ -12,15 +12,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('username')->unique();
+            $table->id('user_id');
+            $table->string('external_identifier')->unique();
             $table->string('name');
             $table->integer('item')->unique(); //Item corporativo del usuario
-            $table->string('device_id');
-            $table->foreignId('rol_id')  //llave foranea a la tabla premise
+            $table->foreignId('role_id')  //llave foranea a la tabla rol
                   ->default(1) 
                   ->nullable(false)
-                  ->constrained('roles')
+                  ->constrained('roles', 'role_id')
                   ->onDelete('cascade');
             $table->timestamps();
             $table->softdeletes();

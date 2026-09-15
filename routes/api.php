@@ -2,16 +2,48 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\QrController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\PremiseController;
+use Illuminate\Session\Middleware\StartSession;
 
-//Route::middleware(['check.authorization', 'check.deviceid'])->group(function(){
-Route::post('/allowLogin', [UserController::class, 'login']);
-//});
+Route::get('/test', function () {
+    return response()->json([
+        'message' => 'API funcionando',
+    ]);
+});
+Route::post('/login', [AuthController::class, 'login']);
 
-Route::post('/login/admin', [UserController::class, 'loginAdmin']);
+Route::middleware([
+    'auth:sanctum',
+    'check.active.session',
+    //'check.authorization:ADMIN,EMPLOYEE'
+])->group(function () {
+    Route::get('/user', function (Request $request) {
+        return response()->json([
+            'user' => $request->user(),
+        ]);
+    });
+});
+
+
+Route::middleware([
+    'auth:sanctum',
+    'check.active.session',
+    'check.authorization:ADMIN',
+])->get('/test-admin', function (Request $request) {
+
+    return response()->json([
+        'status' => 'SUCCESS',
+        'message' => 'Acceso autorizado como ADMIN.',
+        'user' => $request->user()->load('role'),
+    ]);
+
+});
+
 
 Route::post('/status', [QrController::class, 'fetchUserStatusBeforeQr']);
 Route::get('/allowGet', [UserController::class, 'getUserData']);

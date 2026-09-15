@@ -15,11 +15,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('reason_id')  //llave foranea a la tabla
                   ->nullable(false)
-                  ->constrained('reason_leaves')
+                  ->constrained('reasons', 'reason_id')
                   ->onDelete('cascade');
             $table->foreignId('premise_id')  //llave foranea a la tabla premise
                   ->nullable(false)
-                  ->constrained()
+                  ->constrained('premises', 'premise_id')
                   ->onDelete('cascade');
             $table->timestamps();
             $table->softDeletes();

@@ -2,6 +2,10 @@
 
 namespace App\Models;
 
+use App\Models\ReasonPremise;
+use App\Models\Record;
+use App\Models\Role;
+use App\Models\UserActiveSession;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -11,13 +15,13 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     protected $table = 'users';
+    protected $primaryKey = 'user_id';
     // Atributos que se pueden asignar masivamente
     protected $fillable = [ 
-        'username',
+        'external_identifier',
         'name',
         'item',
-        'device_id',
-        'rol_id'
+        'role_id'
         ];
     // Atributos que deben ser convertidos a tipos nativos
     protected function casts(): array
@@ -28,12 +32,15 @@ class User extends Authenticatable
             'deleted_at' => 'datetime',
         ];
     }
-    //Relación muchos a muchos con el modelo LeavePremise
+    protected $hidden = [
+        'remember_token',
+    ];
+    //Relación muchos a muchos con el modelo ReasonPremise
     public function records()
     {
         return $this->hasMany(Record::class);
     }
-    public function leavePremise()
+    public function reasonPremise()
     {
         return $this->belongsToMany(ReasonPremise::class, 'records')
         ->using(Record::class)
@@ -41,6 +48,19 @@ class User extends Authenticatable
     }
     public function role()
     {
-        return $this->belongsTo(Role::class);
+        return $this->belongsTo(
+            Role::class,
+            'role_id',
+            'role_id'
+        );
+    }
+
+    public function activeSession()
+    {
+    return $this->hasOne(
+        UserActiveSession::class,
+        'user_id',
+        'user_id'
+    );
     }
 }
