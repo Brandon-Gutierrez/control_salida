@@ -12,7 +12,8 @@ class ReasonPremiseRepository
         $leavesId = ReasonPremise::where('premise_id', $premiseId)
             ->pluck('reason_id');
         
-        $reasons = ReasonLeave::whereIn('id', $leavesId)
+        $reasons = ReasonLeave::whereIn('reason_id', $leavesId)
+            ->orderBy('name')
             ->pluck('name');
 
         return $reasons;
@@ -22,7 +23,7 @@ class ReasonPremiseRepository
     public function getReasonId(String $nameReason) : ?int
     {
         $reasonId = ReasonLeave::where('name', $nameReason)
-            ->value('id');
+            ->value('reason_id');
         return $reasonId;
     }
 

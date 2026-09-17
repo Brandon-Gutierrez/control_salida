@@ -9,6 +9,8 @@ use App\Repositories\ReasonPremiseRepository;
 use App\Repositories\UserRepository;
 use App\Repositories\ReasonLeaveRepository;
 use App\Repositories\PremiseRepository;
+use App\Models\Premise;
+use Illuminate\Support\Facades\Log;
 
 class LeaveController extends Controller
 {
@@ -30,7 +32,8 @@ class LeaveController extends Controller
         $this->premiseRepository = $premiseRepository;
     }
 
-    public function updateReasons()
+    //Sincroniza el catalogo de motivos de salida con el servicio externo
+    public function syncReasons()
     {
         $response = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
@@ -63,34 +66,25 @@ class LeaveController extends Controller
         ], 200);
     }
 
-    //Obtener las salidas de un predio
-    public function getReasonsOfPremise(Request $request)
+    //Obtener los motivos de salida de un predio
+    public function premiseReasons(Premise $premise)
     {
-        $premiseName = $request->query("namePremise");
-        if(!$premiseName){
-            return response()->json([
-                "status" => 0,
-                "message" => "No es posible encontrar un predio nulo"
-            ], 400);
-        }
-        $premiseId = $this->premiseRepository->getPremiseId($premiseName);
-        if(!$premiseId){
-            return response()->json([
-                "status" => 0,
-                "message" => "No es posible encontrar el predio"
-            ], 400);
-        }
-        $data = $this->reasonPremiseRepository->getReasonsOfPremise($premiseId);
+        $data = $this->reasonPremiseRepository->getReasonsOfPremise($premise->premise_id);
         return response()->json(['reasons' => $data], 200);
     }
 
-    //Confirmar la salida de un usuario
-    public function confirmLeave(Request $request)
+    //Confirmar la salida del usuario autenticado
+    public function store(Request $request)
     {
-        $qrData = $request->input("qrData");
-        $item = $request->input("item");
-        $namePremise = $request->input("namePremise");
-        $nameReason = $request->input("nameReason");
+        $data = $request->validate([
+            'qrData' => ['required', 'string'],
+            'namePremise' => ['required', 'string'],
+            'nameReason' => ['required', 'string'],
+        ]);
+        $qrData = $data["qrData"];
+        $item = $request->user()->item;
+        $namePremise = $data["namePremise"];
+        $nameReason = $data["nameReason"];
         $qrStatus = Redis::get($qrData);
 
         //Validar en redis
@@ -116,13 +110,14 @@ class LeaveController extends Controller
             ], 400);
         }
         
-        //Obtener el id del usuario, el id de la raon, y el id de la premisa en la base de datos local
-        $userId = $this->userRepository->getUserId($item);
+        //Obtener el id de la raon, y el id de la premisa en la base de datos local
         $reasonId = $this->reasonPremiseRepository->getReasonId($nameReason);
         $premiseId = $this->premiseRepository->getPremiseId($namePremise);
 
         //Busca el id en la tabla pivote(reason_premise)
-        $reason_premise_id = $this->reasonPremiseRepository->findAReasonPremise($premiseId, $reasonId);
+        $reason_premise_id = ($premiseId && $reasonId)
+            ? $this->reasonPremiseRepository->findAReasonPremise($premiseId, $reasonId)
+            : null;
         if (!$reason_premise_id)
         {
             return response()->json([
@@ -134,6 +129,7 @@ class LeaveController extends Controller
         //Registrar la salida temporal del usuario
         //LOGICA CON API
         $codeReason = $this->reasonLeaveRepository->getCodeReason($nameReason);
+        Log::class($codeReason);
         $RegisteredCheckout = Http::withHeaders([
                 'keysoftware' => env('KEY_SOFTWARE'),
                 'Content-Type' => 'application/json',
@@ -142,7 +138,7 @@ class LeaveController extends Controller
                 'in_motivo' => $codeReason,
                 //'in_fecha' => now()->format('Y-m-d H:i:s'),
             ]);
-            if($RegisteredCheckout->assertStatus(200) == true)
+            if($RegisteredCheckout->successful())
             {
                 return response()->json([
                     'status' => 0,

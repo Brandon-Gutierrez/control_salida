@@ -25,12 +25,12 @@ class ReasonPremise extends Pivot
 
     public function leave()
     {
-        return $this->belongsTo(ReasonLeave::class);
+        return $this->belongsTo(ReasonLeave::class, 'reason_id', 'reason_id');
     }
 
     public function premise()
     {
-        return $this->belongsTo(Premise::class);
+        return $this->belongsTo(Premise::class, 'premise_id', 'premise_id');
     }
     public function users(){
         return $this->belongsToMany(User::class, 'records')

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Premise extends Model
 {
     protected $table = "premises";
+    protected $primaryKey = 'premise_id';
     protected $fillable = [
         'name',
     ];

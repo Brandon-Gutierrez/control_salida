@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Http;
 use App\Repositories\UserRepository;
 use App\Repositories\PremiseRepository;
 use App\Repositories\RecordRepository;
+use App\Models\Premise;
 
 class QrController extends Controller
 {
@@ -23,18 +24,11 @@ class QrController extends Controller
     }
 
     //Genera codigos unicos para cada predio, para la generacion de qr y la identificacion del predio
-    public function generateDynamicQr(Request $request)
+    public function store(Premise $premise)
     {
-        $premiseName = $request->query("name");
-        $premiseId = $this->premiseRepository->getPremiseId($premiseName);
+        $premiseName = $premise->name;
+        $premiseId = $premise->premise_id;
 
-        if (!$premiseId)
-        {
-            return response()->json([
-                "error" => 0,
-                "message" => "Predio no encontrado",
-            ], 400);
-        }
         $token = $premiseName .'+'. Str::uuid();
         $TTL = 60000;
 
@@ -56,10 +50,13 @@ class QrController extends Controller
     }
 
     //Validar si retorna al mismo predio
-    public function fetchUserStatusBeforeQr(Request $request)
+    public function scan(Request $request)
     {
-        $qrData = $request->input('qrData');
-        $item = $request->input('item');
+        $data = $request->validate([
+            'qrData' => ['required', 'string'],
+        ]);
+        $qrData = $data['qrData'];
+        $item = $request->user()->item;
         $qrStatus = Redis::get($qrData);
 
         //Validar en redis
@@ -112,7 +109,7 @@ class QrController extends Controller
             ], 200);
         }
         //Sino se marca el retorno
-            $premiseName = str($qrData)->before('+');
+            /*$premiseName = str($qrData)->before('+');
             $isSamePremise = $this->recordRepository->isSamePremise($premiseName);
             if($isSamePremise == false)
             {
@@ -120,7 +117,7 @@ class QrController extends Controller
                     "status" => 1,
                     "message" => "El predio de retorno es diferente al predio de salida"
                 ], 403);
-            }
+            }*/
             $data = $dataCheckout->json("data");
             $RegisteredCheckout = Http::withHeaders([
                 'keysoftware' => env('KEY_SOFTWARE'),
@@ -130,7 +127,7 @@ class QrController extends Controller
                 'in_id_solicitud' => $data[0]["id_solicitud"],
             //'in_fecha' => now()->format('Y-m-d H:i:s'),
             ]);
-            if($RegisteredCheckout->assertStatus(200) == true)
+            if($RegisteredCheckout->successful())
             {
                 return response()->json([
                     'status' => 0,

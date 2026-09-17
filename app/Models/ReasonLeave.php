@@ -9,7 +9,8 @@ class ReasonLeave extends Model
 {
     use HasFactory;
     //
-    protected $table = "reason_leaves";
+    protected $table = "reasons";
+    protected $primaryKey = 'reason_id';
     protected $fillable = [
         'name',
         'code',
@@ -23,7 +24,7 @@ class ReasonLeave extends Model
     // Relación muchos a muchos con el modelo premise
     public function premises()
     {
-        return $this->belongsToMany(Premise::class, 'reason_premise')
+        return $this->belongsToMany(Premise::class, 'reason_premise', 'reason_id', 'premise_id')
         ->using(ReasonPremise::class)
         ->withTimestamps();
     }

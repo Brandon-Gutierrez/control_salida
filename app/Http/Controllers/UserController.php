@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Carbon;
@@ -13,17 +15,50 @@ use App\Repositories\UserRepository;
 
 class UserController extends Controller
 {
-    //Obtener los datos del usuario
-    public function getUserData(Request $request) : JsonResponse
+    //Lista todos los usuarios registrados con su rol (panel de administración)
+    public function index(): JsonResponse
     {
-        $external_id = $request->query("ecternal_identifier");
-        //Si el identificador esta vacio
-        if(!$external_id){
-            return response()->json([
-                "status" => "ERROR",
-                "message" => "No se pudo obtener la información"
-            ], 400);
-        }
+        $users = User::query()
+            ->select('user_id', 'name', 'item', 'role_id')
+            ->with('role:role_id,name')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            "status" => 0,
+            "data" => $users,
+        ], 200);
+    }
+
+    //Lista el catálogo de roles disponibles (EMPLOYEE, ADMIN, ...)
+    public function roles(): JsonResponse
+    {
+        return response()->json([
+            "status" => 0,
+            "data" => Role::orderBy('name')->get(['role_id', 'name']),
+        ], 200);
+    }
+
+    //Asigna un rol a un usuario (p. ej. otorgar o quitar permisos de ADMIN)
+    public function updateRole(Request $request, User $user): JsonResponse
+    {
+        $data = $request->validate([
+            'role_id' => ['required', 'integer', 'exists:roles,role_id'],
+        ]);
+
+        $user->update(['role_id' => $data['role_id']]);
+
+        return response()->json([
+            "status" => 0,
+            "data" => $user->fresh()->load('role'),
+        ], 200);
+    }
+
+    //Obtener los datos y el estado de salida del usuario autenticado
+    public function leaveStatus(Request $request) : JsonResponse
+    {
+        $item = $request->query('item');
+
         //LOGICA CON API
         $date = now()->format('Y-m-d');
         $response = Http::withHeaders([
@@ -44,7 +79,7 @@ class UserController extends Controller
         $userData = Http::withHeaders([
             'keysoftware' => env('KEY_SOFTWARE'),
             'Content-Type' => 'application/json',
-            ])->get(env('API_GETCOM'), [
+            ])->get(env('API_GETEMPLOYEE'), [
                 'item' => $item
             ]); 
         //Si la solicitud devolvio error o no se proceso
