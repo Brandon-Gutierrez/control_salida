@@ -15,7 +15,7 @@ use App\Repositories\UserRepository;
 
 class UserController extends Controller
 {
-    //Lista todos los usuarios registrados con su rol (panel de administración)
+    //Lista todos los usuarios registrados con su rol 
     public function index(): JsonResponse
     {
         $users = User::query()

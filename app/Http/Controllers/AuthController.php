@@ -42,14 +42,6 @@ class AuthController extends Controller
             $userData['item']
         );
 
-        //ELIMINAR SESION ANTERIOR SI ES EMPLOYEE
-        if ($user->role && $user->role->name === 'EMPLOYEE'){
-            UserActiveSession::where(
-                'user_id',
-                $user->user_id
-            )->delete();
-        }
-
         //CREAR SESION LARAVEL
         Auth::login($user);
 
@@ -64,6 +56,11 @@ class AuthController extends Controller
             (string) $request->ip(),
             (string) $request->userAgent(),
         );
+
+        //LIMITAR SESIONES CONCURRENTES: 1 para empleados, hasta 5 para administradores.
+        //Se conservan las usadas más recientemente y se cierran las demás.
+        $maxSessions = $user->role?->name === 'ADMIN' ? 5 : 1;
+        $userActiveSessionRepository->enforceSessionLimit($user->user_id, $maxSessions);
 
         return response()->json([
             'status' => 'SUCCESS',
@@ -81,10 +78,12 @@ class AuthController extends Controller
         ], 200);
     }
 
-    //Cerrar la sesion actual
+    //Cerrar la sesion actual (solo el dispositivo actual; no afecta otras sesiones del admin)
     public function logout(Request $request): JsonResponse
     {
-        UserActiveSession::where('user_id', $request->user()->user_id)->delete();
+        UserActiveSession::where('user_id', $request->user()->user_id)
+            ->where('session_id', $request->session()->getId())
+            ->delete();
 
         Auth::guard('web')->logout();
         $request->session()->invalidate();
