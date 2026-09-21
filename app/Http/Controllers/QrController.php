@@ -129,6 +129,10 @@ class QrController extends Controller
             ]);
             if($RegisteredCheckout->successful())
             {
+                // Cierra el registro local (usado para mostrar el motivo de la
+                // última salida en el resumen del usuario).
+                $this->userRepository->registerReturn($request->user()->user_id);
+
                 return response()->json([
                     'status' => 0,
                     'action' => 'showHome',

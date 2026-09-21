@@ -10,7 +10,6 @@ use App\Repositories\UserRepository;
 use App\Repositories\ReasonLeaveRepository;
 use App\Repositories\PremiseRepository;
 use App\Models\Premise;
-use Illuminate\Support\Facades\Log;
 
 class LeaveController extends Controller
 {
@@ -129,7 +128,6 @@ class LeaveController extends Controller
         //Registrar la salida temporal del usuario
         //LOGICA CON API
         $codeReason = $this->reasonLeaveRepository->getCodeReason($nameReason);
-        Log::class($codeReason);
         $RegisteredCheckout = Http::withHeaders([
                 'keysoftware' => env('KEY_SOFTWARE'),
                 'Content-Type' => 'application/json',
@@ -138,8 +136,12 @@ class LeaveController extends Controller
                 'in_motivo' => $codeReason,
                 //'in_fecha' => now()->format('Y-m-d H:i:s'),
             ]);
-            if($RegisteredCheckout->successful())
+            if($RegisteredCheckout->status() === 200)
             {
+                // Guarda localmente qué motivo se usó, para poder mostrarlo luego
+                // en el resumen del usuario (el sistema externo no lo devuelve).
+                $this->userRepository->registerLeave($request->user()->user_id, $reason_premise_id);
+
                 return response()->json([
                     'status' => 0,
                     'message' => 'Salida temporal registrada correctamente'
@@ -149,21 +151,5 @@ class LeaveController extends Controller
                     'status' => 1,
                     'message' => 'Error en el registro de salida temporal'
                     ], 400);
-        //LOGICA CON BASE DE DATOS LOCAL
-        /*
-        $isRegisteredLeave = $this->userRepository->registerLeave($userId, $reason_premise_id);
-        if(!$isRegisteredLeave)
-        {
-            return response()->json([
-                "status" => 1,
-                "message" => "Error al registrar la salida temporal"
-            ], 400);
-        }
-        //Redis::del($token);
-        return response()->json([
-            "status" => 0,
-            "message" => "Salida temporal registrada correctamente"
-        ]);
-        */
     }
 }

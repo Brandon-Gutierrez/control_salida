@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
 class Record extends Pivot
 {
     protected $table = 'records';
+    protected $primaryKey = 'record_id';
+    public $incrementing = true;
 
     public $timestamps = false;
 

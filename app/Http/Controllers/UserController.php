@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -57,7 +58,8 @@ class UserController extends Controller
     //Obtener los datos y el estado de salida del usuario autenticado
     public function leaveStatus(Request $request) : JsonResponse
     {
-        $item = $request->query('item');
+        $authUser = $request->user();
+        $item = $authUser->item;
 
         //LOGICA CON API
         $date = now()->format('Y-m-d');
@@ -106,12 +108,26 @@ class UserController extends Controller
             ? Carbon::createFromFormat('Y-m-d H:i:s', $data[0]['fecha_salida'])->toIso8601String()
             : null;
 
+        // El motivo de la salida no viene del sistema externo, así que se
+        // busca en el registro local guardado al confirmar la salida.
+        // Se desempata por record_id porque leave_time se guarda con
+        // precisión de segundos y dos salidas podrían registrarse en el mismo segundo.
+        $reasonName = Record::where('user_id', $authUser->user_id)
+            ->orderByDesc('leave_time')
+            ->orderByDesc('record_id')
+            ->with('reasonPremise.leave')
+            ->first()
+            ?->reasonPremise
+            ?->leave
+            ?->name;
+
         return response()->json([
             "name" => $userData['name'],
             "item" => $userData["item"],
             "token" => $userData->json("token"),
             "isLeave" => true,
             "dateLeave" => $dateLeave,
+            "reason" => $reasonName,
         ], 200);
         
         // LOGICA CON BASE DE DATOS LOCAL
