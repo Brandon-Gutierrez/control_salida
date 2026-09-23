@@ -30,7 +30,7 @@ class QrController extends Controller
         $premiseId = $premise->premise_id;
 
         $token = $premiseName .'+'. Str::uuid();
-        $TTL = 60000;
+        $TTL = 300;
 
         Redis::setex($token, $TTL, $premiseId);
         $isStorage = Redis::get($token);
@@ -109,15 +109,15 @@ class QrController extends Controller
             ], 200);
         }
         //Sino se marca el retorno
-            /*$premiseName = str($qrData)->before('+');
-            $isSamePremise = $this->recordRepository->isSamePremise($premiseName);
-            if($isSamePremise == false)
+            $isSamePremise = $this->recordRepository->isSamePremise(
+                $request->user()->user_id, $qrStatus);
+            if (!$isSamePremise)
             {
                 return response()->json([
                     "status" => 1,
                     "message" => "El predio de retorno es diferente al predio de salida"
                 ], 403);
-            }*/
+            }
             $data = $dataCheckout->json("data");
             $RegisteredCheckout = Http::withHeaders([
                 'keysoftware' => env('KEY_SOFTWARE'),

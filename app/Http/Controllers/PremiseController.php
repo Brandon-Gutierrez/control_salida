@@ -49,7 +49,7 @@ class PremiseController extends Controller
     }
 
     /**
-     * Reemplaza los motivos permitidos de un predio.
+     * Actualiza los motivos permitidos de un predio.
      */
     public function updateReasons(Request $request, Premise $premise): JsonResponse
     {
