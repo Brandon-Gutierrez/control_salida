@@ -16,7 +16,7 @@ class PremiseRepository
     public function getAllWithReasons(): Collection
     {
         return Premise::query()
-            ->select('premise_id', 'name', 'created_at')
+            ->select('premise_id', 'name', 'latitude', 'longitude', 'created_at')
             ->with(['leaves' => function ($query) {
                 $query->select('reasons.reason_id', 'reasons.name')
                     ->orderBy('reasons.name');
@@ -39,6 +39,8 @@ class PremiseRepository
         return [
             'id' => $premise->premise_id,
             'name' => $premise->name,
+            'latitude' => $premise->latitude,
+            'longitude' => $premise->longitude,
             'reason_names' => $premise->leaves->sortBy('name')->pluck('name')->values()->all(),
         ];
     }

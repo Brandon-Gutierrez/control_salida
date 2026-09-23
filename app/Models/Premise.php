@@ -10,6 +10,8 @@ class Premise extends Model
     protected $primaryKey = 'premise_id';
     protected $fillable = [
         'name',
+        'latitude',
+        'longitude',
     ];
 
     protected $casts =[
@@ -23,5 +25,10 @@ class Premise extends Model
         return $this->belongsToMany(ReasonLeave::class, 'reason_premise', 'premise_id', 'reason_id')
         ->using(ReasonPremise::class)
         ->withTimestamps();
+    }
+
+    public function responsibleUsers()
+    {
+        return $this->hasMany(User::class, 'premise_id', 'premise_id');
     }
 }

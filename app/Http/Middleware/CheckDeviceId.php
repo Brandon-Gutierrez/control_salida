@@ -5,7 +5,6 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-use App\Models\User;
 
 class CheckDeviceId
 {
@@ -16,24 +15,17 @@ class CheckDeviceId
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->headers->has("DeviceId"))
-        {
-            $header = $request->header("DeviceId");
-            if (!empty($header))
-            {
-                $deviceId = User::where([
-                "username" => response()->json("username"),
-                "item" => response()->json("item"),
-                ])->value('device_id');
-                if ($request->header("DeviceId") === $deviceId)
-                {
-                return $next($request);
-                }
-            }
+        $user = $request->user();
+        $deviceId = $request->header('DeviceId');
+
+        if ($user && is_string($deviceId) && $deviceId !== '' && $user->device_id
+            && hash_equals($user->device_id, hash('sha256', $deviceId))) {
+            return $next($request);
         }
+
         return response()->json([
-            "status" => 1,
-            "message" => "Dispositivo de usuario no identificado"
-        ], 401);
+            'status' => 'ERROR',
+            'message' => 'Este dispositivo no está autorizado para la cuenta. Contacte a Recursos Humanos para cambiarlo.',
+        ], 403);
     }
 }

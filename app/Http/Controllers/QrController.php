@@ -9,18 +9,21 @@ use App\Repositories\UserRepository;
 use App\Repositories\PremiseRepository;
 use App\Repositories\RecordRepository;
 use App\Models\Premise;
+use App\Services\LeaveQuotaService;
 
 class QrController extends Controller
 {
     protected UserRepository $userRepository;
     protected PremiseRepository $premiseRepository;
     protected RecordRepository $recordRepository;
+    protected LeaveQuotaService $leaveQuotaService;
 
-    public function __construct(UserRepository $userRepository, PremiseRepository $premiseRepository, RecordRepository $recordRepository)
+    public function __construct(UserRepository $userRepository, PremiseRepository $premiseRepository, RecordRepository $recordRepository, LeaveQuotaService $leaveQuotaService)
     {
         $this->userRepository = $userRepository;
         $this->premiseRepository = $premiseRepository;
         $this->recordRepository = $recordRepository;
+        $this->leaveQuotaService = $leaveQuotaService;
     }
 
     //Genera codigos unicos para cada predio, para la generacion de qr y la identificacion del predio
@@ -47,6 +50,20 @@ class QrController extends Controller
             'token' => $token,
             'TTL' => $TTL,
             ], 200); 
+    }
+
+    /** Genera el QR únicamente para el predio asignado al responsable autenticado. */
+    public function storeForResponsible(Request $request)
+    {
+        $premise = $request->user()->premise;
+        if (!$premise) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'La cuenta no tiene un predio asignado.'
+            ], 403);
+        }
+
+        return $this->store($premise);
     }
 
     //Validar si retorna al mismo predio
@@ -101,6 +118,11 @@ class QrController extends Controller
         //Si el usuario no salida, mostramos los motivos
         if($dataCheckout->json('error') === -1 && empty($dataCheckout->json('data')))
         {
+            $quotaExceeded = $this->leaveQuotaService->check($request->user(), (int) $qrStatus);
+            if ($quotaExceeded) {
+                return response()->json($this->leaveQuotaService->rejectionPayload($quotaExceeded), 403);
+            }
+
             return response()->json([
             'status' => 0, 
             'action' => 'showReasons', 

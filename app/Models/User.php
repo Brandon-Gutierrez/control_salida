@@ -21,7 +21,11 @@ class User extends Authenticatable
         'external_identifier',
         'name',
         'item',
-        'role_id'
+        'role_id',
+        'username',
+        'password',
+        'device_id',
+        'premise_id',
         ];
     // Atributos que deben ser convertidos a tipos nativos
     protected function casts(): array
@@ -34,6 +38,8 @@ class User extends Authenticatable
     }
     protected $hidden = [
         'remember_token',
+        'password',
+        'device_id',
     ];
     //Relación muchos a muchos con el modelo ReasonPremise
     public function records()
@@ -62,5 +68,15 @@ class User extends Authenticatable
         'user_id',
         'user_id'
     );
+    }
+
+    public function premise()
+    {
+        return $this->belongsTo(Premise::class, 'premise_id', 'premise_id');
+    }
+
+    public function leavePolicy()
+    {
+        return $this->hasOne(UserLeavePolicy::class, 'user_id', 'user_id');
     }
 }

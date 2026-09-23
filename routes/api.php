@@ -21,17 +21,28 @@ Route::get('/health', fn () => response()->json(['status' => 'OK']))->name('heal
 
 Route::post('/auth/login', [AuthController::class, 'login'])->name('auth.login');
 
-Route::middleware(['auth:sanctum', 'check.active.session'])->group(function () {
+Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->group(function () {
 
     // Sesión
     Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
     Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
 
     // Empleado (app móvil)
-    Route::get('/me/leave-status', [UserController::class, 'leaveStatus'])->name('me.leave-status');
-    Route::post('/qr/scan', [QrController::class, 'scan'])->name('qr.scan');
-    Route::get('/premises/{premise:name}/reasons', [LeaveController::class, 'premiseReasons'])->name('premises.reasons');
-    Route::post('/leaves', [LeaveController::class, 'store'])->name('leaves.store');
+    // La cuenta del responsable no puede acceder a las funciones de empleados.
+    Route::middleware('check.authorization:EMPLOYEE')->group(function () {
+        Route::get('/me/leave-status', [UserController::class, 'leaveStatus'])->name('me.leave-status');
+        Route::post('/qr/scan', [QrController::class, 'scan'])
+            ->middleware('check.premise.location')->name('qr.scan');
+        Route::get('/premises/{premise:name}/reasons', [LeaveController::class, 'premiseReasons'])->name('premises.reasons');
+        Route::post('/leaves', [LeaveController::class, 'store'])
+            ->middleware('check.premise.location')->name('leaves.store');
+    });
+
+    Route::prefix('manager')->name('manager.')
+        ->middleware('check.authorization:PREMISE_MANAGER')
+        ->group(function () {
+            Route::post('/qr-token', [QrController::class, 'storeForResponsible'])->name('qr-token.store');
+        });
 
     // Administrador (app web)
     Route::prefix('admin')
@@ -40,6 +51,7 @@ Route::middleware(['auth:sanctum', 'check.active.session'])->group(function () {
         ->group(function () {
             Route::get('/premises', [PremiseController::class, 'index'])->name('premises.index');
             Route::post('/premises', [PremiseController::class, 'store'])->name('premises.store');
+            Route::put('/premises/{premise}', [PremiseController::class, 'update'])->name('premises.update');
             Route::put('/premises/{premise}/reasons', [PremiseController::class, 'updateReasons'])->name('premises.reasons.update');
             Route::post('/premises/{premise}/qr-tokens', [QrController::class, 'store'])->name('premises.qr-tokens.store');
 
@@ -48,6 +60,10 @@ Route::middleware(['auth:sanctum', 'check.active.session'])->group(function () {
 
             Route::get('/roles', [UserController::class, 'roles'])->name('roles.index');
             Route::get('/users', [UserController::class, 'index'])->name('users.index');
+            Route::get('/users/{user}/leave-policy', [UserController::class, 'leavePolicy'])->name('users.leave-policy.show');
+            Route::put('/users/{user}/leave-policy', [UserController::class, 'updateLeavePolicy'])->name('users.leave-policy.update');
             Route::put('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.role.update');
+            Route::post('/users/{user}/device/reset', [UserController::class, 'resetUserDevice'])->name('users.device.reset');
+            Route::post('/users/premise-managers', [UserController::class, 'createPremiseManager'])->name('users.premise-managers.store');
         });
 });

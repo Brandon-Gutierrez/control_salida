@@ -35,17 +35,40 @@ class PremiseController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:premises,name'],
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
             'reasons' => ['sometimes', 'array'],
             'reasons.*' => ['string', 'exists:reasons,name'],
         ]);
 
-        $premise = Premise::create(['name' => $data['name']]);
+        $premise = Premise::create([
+            'name' => $data['name'],
+            'latitude' => $data['latitude'],
+            'longitude' => $data['longitude'],
+        ]);
         $this->premiseRepository->syncReasonsByName($premise, $data['reasons'] ?? []);
 
         return response()->json([
             "status" => 0,
             "data" => $this->premiseRepository->toResource($premise),
         ], 201);
+    }
+
+    /** Actualiza nombre y/o ubicación del predio. */
+    public function update(Request $request, Premise $premise): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:255', 'unique:premises,name,' . $premise->premise_id . ',premise_id'],
+            'latitude' => ['sometimes', 'required', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['sometimes', 'required', 'numeric', 'between:-180,180', 'required_with:latitude'],
+        ]);
+
+        $premise->update($data);
+
+        return response()->json([
+            'status' => 0,
+            'data' => $this->premiseRepository->toResource($premise->fresh()),
+        ], 200);
     }
 
     /**

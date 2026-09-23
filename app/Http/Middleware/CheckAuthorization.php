@@ -30,7 +30,8 @@ class CheckAuthorization
             ], 403);
         }
 
-        if (!in_array($user->role->name, $roles)) {
+        $allowedRoles = array_map('strtoupper', $roles);
+        if (!in_array(strtoupper($user->role->name), $allowedRoles, true)) {
             return response()->json([
                 'status' => 'ERROR',
                 'message' => 'No tiene permisos para realizar esta acción.'

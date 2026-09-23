@@ -3,6 +3,7 @@
 use App\Http\Middleware\CheckActiveSession;
 use App\Http\Middleware\CheckAuthorization;
 use App\Http\Middleware\CheckDeviceId;
+use App\Http\Middleware\CheckPremiseLocation;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -25,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'check.authorization' => CheckAuthorization::class,
             'check.deviceid' => CheckDeviceId::class,
             'check.active.session' => CheckActiveSession::class,
+            'check.premise.location' => CheckPremiseLocation::class,
         ]);
         
         $middleware->redirectGuestsTo(function ($request) {

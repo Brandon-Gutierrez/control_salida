@@ -10,6 +10,7 @@ use App\Repositories\UserRepository;
 use App\Repositories\ReasonLeaveRepository;
 use App\Repositories\PremiseRepository;
 use App\Models\Premise;
+use App\Services\LeaveQuotaService;
 
 class LeaveController extends Controller
 {
@@ -18,17 +19,20 @@ class LeaveController extends Controller
     protected UserRepository $userRepository;
     protected ReasonLeaveRepository $reasonLeaveRepository;
     protected PremiseRepository $premiseRepository;
+    protected LeaveQuotaService $leaveQuotaService;
 
     
     public function __construct(ReasonPremiseRepository $reasonPremiseRepository,
                                 UserRepository $userRepository,
                                 ReasonLeaveRepository $reasonLeaveRepository,
-                                PremiseRepository $premiseRepository) 
+                                PremiseRepository $premiseRepository,
+                                LeaveQuotaService $leaveQuotaService)
     {
         $this->reasonPremiseRepository = $reasonPremiseRepository;
         $this->userRepository = $userRepository;
         $this->reasonLeaveRepository = $reasonLeaveRepository;
         $this->premiseRepository = $premiseRepository;
+        $this->leaveQuotaService = $leaveQuotaService;
     }
 
     //Sincroniza el catalogo de motivos de salida con el servicio externo
@@ -112,6 +116,12 @@ class LeaveController extends Controller
         //Obtener el id de la raon, y el id de la premisa en la base de datos local
         $reasonId = $this->reasonPremiseRepository->getReasonId($nameReason);
         $premiseId = $this->premiseRepository->getPremiseId($namePremise);
+        if (!$premiseId || (int) $qrStatus !== (int) $premiseId) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'El predio seleccionado no coincide con el predio del código QR.',
+            ], 403);
+        }
 
         //Busca el id en la tabla pivote(reason_premise)
         $reason_premise_id = ($premiseId && $reasonId)
@@ -123,6 +133,11 @@ class LeaveController extends Controller
                 "status" => 1,
                 "message" => "No se encontro la razon de salida del predio"
             ], 400);
+        }
+
+        $quotaExceeded = $this->leaveQuotaService->check($request->user(), $premiseId);
+        if ($quotaExceeded) {
+            return response()->json($this->leaveQuotaService->rejectionPayload($quotaExceeded), 403);
         }
 
         //Registrar la salida temporal del usuario
