@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Models\Premise;
 use App\Models\ReasonLeave;
+use App\Models\Role;
 use Illuminate\Support\Collection;
 
 class PremiseRepository
@@ -17,7 +18,9 @@ class PremiseRepository
     {
         return Premise::query()
             ->select('premise_id', 'name', 'latitude', 'longitude', 'created_at')
-            ->with(['leaves' => function ($query) {
+            ->with(['responsibleUsers' => fn ($q) => $q->select('user_id', 'name', 'premise_id')
+                    ->whereHas('role', fn ($r) => $r->whereRaw('UPPER(name) = ?', [Role::MANAGE_PREMISE])),
+                'leaves' => function ($query) {
                 $query->select('reasons.reason_id', 'reasons.name')
                     ->orderBy('reasons.name');
             }])
@@ -41,7 +44,20 @@ class PremiseRepository
             'name' => $premise->name,
             'latitude' => $premise->latitude,
             'longitude' => $premise->longitude,
+            'manager' => $this->managerOf($premise),
             'reason_names' => $premise->leaves->sortBy('name')->pluck('name')->values()->all(),
         ];
+    }
+
+    /** Responsable asignado (rol MANAGE_PREMISE) o null. */
+    private function managerOf(Premise $premise): ?array
+    {
+        $manager = $premise->relationLoaded('responsibleUsers')
+            ? $premise->responsibleUsers->first()
+            : $premise->responsibleUsers()
+                ->whereHas('role', fn ($r) => $r->whereRaw('UPPER(name) = ?', [Role::MANAGE_PREMISE]))
+                ->first(['user_id', 'name', 'premise_id']);
+
+        return $manager ? ['user_id' => $manager->user_id, 'name' => $manager->name] : null;
     }
 }

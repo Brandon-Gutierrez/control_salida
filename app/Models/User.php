@@ -75,6 +75,12 @@ class User extends Authenticatable
         return $this->belongsTo(Premise::class, 'premise_id', 'premise_id');
     }
 
+    /** true si es el responsable de un predio (rol MANAGE_PREMISE). */
+    public function isPremiseManager(): bool
+    {
+        return strtoupper($this->role?->name ?? '') === Role::MANAGE_PREMISE;
+    }
+
     public function leavePolicy()
     {
         return $this->hasOne(UserLeavePolicy::class, 'user_id', 'user_id');

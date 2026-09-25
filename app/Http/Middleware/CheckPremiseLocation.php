@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Premise;
 use Closure;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -18,9 +19,27 @@ class CheckPremiseLocation
         $data = $request->validate([
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
-            'accuracy_m' => ['required', 'numeric', 'min:0', 'max:' . self::MAX_RADIUS_METERS],
+            'accuracy_m' => ['required', 'numeric', 'gt:0', 'max:' . self::MAX_RADIUS_METERS],
             'location_timestamp' => ['required', 'date'],
+            'is_mocked' => ['required', 'boolean'],
+            'vpn_detected' => ['required', 'boolean'],
         ]);
+
+        // Señales de falsificación reportadas por el dispositivo (ubicación
+        // simulada del sistema o conexión por VPN/proxy).
+        if ($request->boolean('is_mocked') || $request->boolean('vpn_detected')) {
+            Log::warning('Ubicación rechazada por posible falsificación.', [
+                'user_id' => $request->user()?->user_id,
+                'is_mocked' => $request->boolean('is_mocked'),
+                'vpn_detected' => $request->boolean('vpn_detected'),
+            ]);
+
+            return response()->json([
+                'status' => 1,
+                'code' => 'LOCATION_SPOOFING_DETECTED',
+                'message' => 'No se puede validar su ubicación. Desactive la ubicación simulada (GPS falso) y las conexiones VPN e intente nuevamente.',
+            ], 403);
+        }
 
         $capturedAt = strtotime($data['location_timestamp']);
         $now = now()->timestamp;

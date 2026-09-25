@@ -5,6 +5,7 @@ use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\PremiseController;
 use App\Http\Controllers\QrController;
 use App\Http\Controllers\UserController;
+use App\Models\Role;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -39,7 +40,7 @@ Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->g
     });
 
     Route::prefix('manager')->name('manager.')
-        ->middleware('check.authorization:PREMISE_MANAGER')
+        ->middleware('check.authorization:' . Role::MANAGE_PREMISE)
         ->group(function () {
             Route::post('/qr-token', [QrController::class, 'storeForResponsible'])->name('qr-token.store');
         });
@@ -63,6 +64,7 @@ Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->g
             Route::get('/users/{user}/leave-policy', [UserController::class, 'leavePolicy'])->name('users.leave-policy.show');
             Route::put('/users/{user}/leave-policy', [UserController::class, 'updateLeavePolicy'])->name('users.leave-policy.update');
             Route::put('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.role.update');
+            Route::put('/users/{user}/premise', [UserController::class, 'assignPremise'])->name('users.premise.update');
             Route::post('/users/{user}/device/reset', [UserController::class, 'resetUserDevice'])->name('users.device.reset');
             Route::post('/users/premise-managers', [UserController::class, 'createPremiseManager'])->name('users.premise-managers.store');
         });

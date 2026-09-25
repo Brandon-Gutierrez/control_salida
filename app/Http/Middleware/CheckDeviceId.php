@@ -16,6 +16,13 @@ class CheckDeviceId
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
+
+        // La vinculación persistente es para empleados de la aplicación móvil.
+        // Admin y responsables de predio usan el panel web.
+        if ($user && strtoupper($user->role?->name ?? '') !== 'EMPLOYEE') {
+            return $next($request);
+        }
+
         $deviceId = $request->header('DeviceId');
 
         if ($user && is_string($deviceId) && $deviceId !== '' && $user->device_id

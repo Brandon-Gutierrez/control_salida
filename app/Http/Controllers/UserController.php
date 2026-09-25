@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\UserActiveSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Carbon;
@@ -22,8 +23,8 @@ class UserController extends Controller
     public function index(): JsonResponse
     {
         $users = User::query()
-            ->select('user_id', 'name', 'item', 'role_id', 'device_bound_at')
-            ->with(['role:role_id,name', 'leavePolicy'])
+            ->select('user_id', 'name', 'item', 'role_id', 'premise_id', 'device_bound_at')
+            ->with(['role:role_id,name', 'premise:premise_id,name', 'leavePolicy'])
             ->orderBy('name')
             ->get();
 
@@ -42,18 +43,81 @@ class UserController extends Controller
         ], 200);
     }
 
-    //Asigna un rol a un usuario (p. ej. otorgar o quitar permisos de ADMIN)
+    //Asigna un rol a un usuario (p. ej. otorgar o quitar permisos de ADMIN).
+    //Para MANAGE_PREMISE hace falta un predio (enviado en la misma petición o
+    //ya asignado); al salir de ese rol el predio se desasigna.
     public function updateRole(Request $request, User $user): JsonResponse
     {
         $data = $request->validate([
             'role_id' => ['required', 'integer', 'exists:roles,role_id'],
+            'premise_id' => ['nullable', 'integer', 'exists:premises,premise_id'],
         ]);
 
-        $user->update(['role_id' => $data['role_id']]);
+        // Un administrador que se quitara su propio rol (o se volviera
+        // MANAGE_PREMISE, que no puede cerrar sesión) quedaría sin acceso.
+        if ($request->user()->user_id === $user->user_id) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'No puede cambiar su propio rol. Pídalo a otro administrador.',
+            ], 422);
+        }
+
+        $newRole = Role::findOrFail($data['role_id']);
+        $becomesManager = strtoupper($newRole->name) === Role::MANAGE_PREMISE;
+
+        // Las cuentas locales (con usuario/contraseña propios) solo sirven como
+        // responsable de predio: no existen en el sistema externo.
+        if ($user->username !== null && !$becomesManager) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'Esta cuenta se creó solo para gestionar un predio y no puede tener otro rol.',
+            ], 422);
+        }
+
+        $premiseId = null;
+        if ($becomesManager) {
+            $premiseId = $data['premise_id'] ?? $user->premise_id;
+            if (!$premiseId) {
+                return response()->json([
+                    'status' => 1,
+                    'message' => 'Elija el predio del que será responsable.',
+                ], 422);
+            }
+        }
+
+        $user->update(['role_id' => $newRole->role_id, 'premise_id' => $premiseId]);
+
+        // Los permisos cambian de raíz: se cierran sus sesiones para que
+        // vuelva a entrar con el rol nuevo (nunca queda una pantalla vieja abierta).
+        UserActiveSession::where('user_id', $user->user_id)->delete();
 
         return response()->json([
             "status" => 0,
-            "data" => $user->fresh()->load('role'),
+            "data" => $user->fresh()->load(['role', 'premise']),
+        ], 200);
+    }
+
+    //Cambia el predio del que es responsable una cuenta MANAGE_PREMISE
+    public function assignPremise(Request $request, User $user): JsonResponse
+    {
+        $data = $request->validate([
+            'premise_id' => ['required', 'integer', 'exists:premises,premise_id'],
+        ]);
+
+        if (!$user->isPremiseManager()) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'Solo las cuentas de gestor de predio tienen un predio asignado.',
+            ], 422);
+        }
+
+        // La sesión abierta no se cierra: el QR siempre se genera con el predio
+        // que el servidor tiene asignado en ese momento.
+        $user->update(['premise_id' => $data['premise_id']]);
+
+        return response()->json([
+            'status' => 0,
+            'data' => $user->fresh()->load(['role', 'premise']),
         ], 200);
     }
 
@@ -89,6 +153,13 @@ class UserController extends Controller
     /** Revoca las sesiones y permite que la cuenta se vincule a un dispositivo nuevo. */
     public function resetUserDevice(Request $request, User $user): JsonResponse
     {
+        if (strtoupper($user->role?->name ?? '') !== 'EMPLOYEE') {
+            return response()->json([
+                'status' => 1,
+                'message' => 'La vinculación de dispositivo solo aplica a cuentas de la aplicación móvil.',
+            ], 422);
+        }
+
         if ($request->user()->user_id === $user->user_id) {
             return response()->json([
                 'status' => 1,
@@ -120,7 +191,7 @@ class UserController extends Controller
         ]);
 
         $password = $data['password'] ?? Str::random(20);
-        $roleId = Role::whereRaw('UPPER(name) = ?', ['PREMISE_MANAGER'])->value('role_id');
+        $roleId = Role::whereRaw('UPPER(name) = ?', [Role::MANAGE_PREMISE])->firstOrFail()->role_id;
 
         $item = random_int(1_000_000_000, 2_000_000_000);
         while (User::where('item', $item)->exists()) {

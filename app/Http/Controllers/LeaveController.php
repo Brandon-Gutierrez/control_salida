@@ -11,6 +11,9 @@ use App\Repositories\ReasonLeaveRepository;
 use App\Repositories\PremiseRepository;
 use App\Models\Premise;
 use App\Services\LeaveQuotaService;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class LeaveController extends Controller
 {
@@ -80,43 +83,99 @@ class LeaveController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'qrData' => ['required', 'string'],
+            'qrData' => ['required_without:leaveTicket', 'nullable', 'string'],
+            'leaveTicket' => ['required_without:qrData', 'nullable', 'string'],
             'namePremise' => ['required', 'string'],
             'nameReason' => ['required', 'string'],
         ]);
-        $qrData = $data["qrData"];
+        $leaveTicket = trim($data['leaveTicket'] ?? $data['qrData'] ?? '');
+        if ($leaveTicket === '') {
+            return response()->json([
+                'status' => 1,
+                'code' => 'LEAVE_TICKET_INVALID',
+                'message' => 'Falta el comprobante del escaneo. Vuelva a escanear el QR.',
+                'retryable' => false,
+            ], 422);
+        }
+
         $item = $request->user()->item;
         $namePremise = $data["namePremise"];
         $nameReason = $data["nameReason"];
-        $qrStatus = Redis::get($qrData);
+        try {
+            $ticketData = Redis::get('leave-ticket:' . $leaveTicket);
+        } catch (Throwable $exception) {
+            Log::error('No se pudo validar el ticket de salida en Redis.', [
+                'user_id' => $request->user()->user_id,
+                'exception' => $exception::class,
+            ]);
 
-        //Validar en redis
-        if(!$qrStatus)
-        {
             return response()->json([
-                "status" => 1,
-                "message" => "Tiempo de espera del QR expirado"
-            ], 400);
+                'status' => 1,
+                'code' => 'QR_SERVICE_UNAVAILABLE',
+                'message' => 'No se pudo validar el escaneo por un problema temporal. Intente nuevamente.',
+                'retryable' => true,
+            ], 503);
         }
 
-        $response = Http::withHeaders([
-            'keysoftware' => env('KEY_SOFTWARE'),
-            ])->get(env('API_GETEMPLOYEE'), [
-                'item' => $item
-            ]); 
-
-        if(!$response || $response->json("status") == 1)
-        {
+        $ticket = is_string($ticketData) ? json_decode($ticketData, true) : null;
+        if (!is_array($ticket) || !isset($ticket['user_id'], $ticket['premise_id'])) {
             return response()->json([
-                "status" => 1,
-                "message" => "Usuario no identificado, intentelo nuevamente",
-            ], 400);
+                'status' => 1,
+                'code' => 'LEAVE_TICKET_EXPIRED',
+                'message' => 'El comprobante del escaneo venció. Vuelva a escanear el QR si sigue vigente; de lo contrario, solicite uno nuevo.',
+                'retryable' => false,
+            ], 410);
+        }
+
+        if ((int) $ticket['user_id'] !== (int) $request->user()->user_id) {
+            return response()->json([
+                'status' => 1,
+                'code' => 'LEAVE_TICKET_INVALID',
+                'message' => 'El escaneo no pertenece a esta cuenta. Vuelva a escanear el QR.',
+                'retryable' => false,
+            ], 403);
+        }
+
+        $premiseId = (int) $ticket['premise_id'];
+
+        try {
+            $response = Http::connectTimeout(3)->timeout(8)->withHeaders([
+                'keysoftware' => env('KEY_SOFTWARE'),
+            ])->get(env('API_GETEMPLOYEE'), ['item' => $item]);
+        } catch (ConnectionException $exception) {
+            Log::warning('Servicio de empleados no disponible al registrar salida.', [
+                'user_id' => $request->user()->user_id,
+                'exception' => $exception::class,
+            ]);
+
+            return $this->temporaryFailure('EMPLOYEE_SERVICE_UNAVAILABLE');
+        }
+
+        if ($response->failed()) {
+            Log::warning('El servicio de empleados respondió con error al registrar salida.', [
+                'user_id' => $request->user()->user_id,
+                'http_status' => $response->status(),
+            ]);
+
+            return $this->temporaryFailure(
+                'EMPLOYEE_SERVICE_UNAVAILABLE',
+                $response->serverError() || $response->status() === 429,
+            );
+        }
+
+        if ($response->json('status') == 1) {
+            return response()->json([
+                'status' => 1,
+                'code' => 'EMPLOYEE_NOT_IDENTIFIED',
+                'message' => 'No se pudo identificar al usuario en el sistema. Verifique la cuenta e intente nuevamente.',
+                'retryable' => false,
+            ], 422);
         }
         
-        //Obtener el id de la raon, y el id de la premisa en la base de datos local
+        // Obtener el motivo local y comprobarlo contra el predio asociado al QR escaneado.
         $reasonId = $this->reasonPremiseRepository->getReasonId($nameReason);
-        $premiseId = $this->premiseRepository->getPremiseId($namePremise);
-        if (!$premiseId || (int) $qrStatus !== (int) $premiseId) {
+        $requestedPremiseId = $this->premiseRepository->getPremiseId($namePremise);
+        if (!$requestedPremiseId || $premiseId !== (int) $requestedPremiseId) {
             return response()->json([
                 'status' => 1,
                 'message' => 'El predio seleccionado no coincide con el predio del código QR.',
@@ -130,9 +189,11 @@ class LeaveController extends Controller
         if (!$reason_premise_id)
         {
             return response()->json([
-                "status" => 1,
-                "message" => "No se encontro la razon de salida del predio"
-            ], 400);
+                'status' => 1,
+                'code' => 'REASON_NOT_AVAILABLE_FOR_PREMISE',
+                'message' => 'El motivo de salida no está disponible para el predio seleccionado.',
+                'retryable' => false,
+            ], 422);
         }
 
         $quotaExceeded = $this->leaveQuotaService->check($request->user(), $premiseId);
@@ -143,28 +204,61 @@ class LeaveController extends Controller
         //Registrar la salida temporal del usuario
         //LOGICA CON API
         $codeReason = $this->reasonLeaveRepository->getCodeReason($nameReason);
-        $RegisteredCheckout = Http::withHeaders([
+        try {
+            $registeredCheckout = Http::connectTimeout(3)->timeout(8)->withHeaders([
                 'keysoftware' => env('KEY_SOFTWARE'),
                 'Content-Type' => 'application/json',
             ])->post(env('API_REGISTERCHECKOUT'), [
                 'in_item' => $item,
                 'in_motivo' => $codeReason,
-                //'in_fecha' => now()->format('Y-m-d H:i:s'),
             ]);
-            if($RegisteredCheckout->status() === 200)
-            {
-                // Guarda localmente qué motivo se usó, para poder mostrarlo luego
-                // en el resumen del usuario (el sistema externo no lo devuelve).
-                $this->userRepository->registerLeave($request->user()->user_id, $reason_premise_id);
+        } catch (ConnectionException $exception) {
+            Log::warning('Servicio externo no disponible al registrar salida.', [
+                'user_id' => $request->user()->user_id,
+                'exception' => $exception::class,
+            ]);
 
-                return response()->json([
-                    'status' => 0,
-                    'message' => 'Salida temporal registrada correctamente'
-                    ], 200);
-            }
-            return response()->json([
-                    'status' => 1,
-                    'message' => 'Error en el registro de salida temporal'
-                    ], 400);
+            return $this->temporaryFailure('LEAVE_REGISTRATION_RESULT_UNKNOWN', false);
+        }
+
+        if (!$registeredCheckout->successful()) {
+            Log::warning('El servicio externo rechazó el registro de salida.', [
+                'user_id' => $request->user()->user_id,
+                'http_status' => $registeredCheckout->status(),
+            ]);
+
+            return $this->temporaryFailure(
+                'LEAVE_REGISTRATION_FAILED',
+                $registeredCheckout->serverError() || $registeredCheckout->status() === 429,
+            );
+        }
+
+        $this->userRepository->registerLeave($request->user()->user_id, $reason_premise_id);
+
+        try {
+            Redis::del('leave-ticket:' . $leaveTicket);
+        } catch (Throwable $exception) {
+            Log::warning('No se pudo invalidar un ticket de salida consumido.', [
+                'user_id' => $request->user()->user_id,
+                'exception' => $exception::class,
+            ]);
+        }
+
+        return response()->json([
+            'status' => 0,
+            'message' => 'Salida temporal registrada correctamente',
+        ], 200);
+    }
+
+    private function temporaryFailure(string $code, bool $retryable = true)
+    {
+        return response()->json([
+            'status' => 1,
+            'code' => $code,
+            'message' => $retryable
+                ? 'Un servicio necesario no está disponible temporalmente. Intente nuevamente en unos segundos.'
+                : 'No se pudo confirmar el resultado de la operación. Consulte el estado antes de volver a intentarla.',
+            'retryable' => $retryable,
+        ], 502);
     }
 }
