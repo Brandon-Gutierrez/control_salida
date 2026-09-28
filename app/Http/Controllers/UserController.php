@@ -85,6 +85,10 @@ class UserController extends Controller
             }
         }
 
+        if ($premiseId && ($taken = $this->premiseTakenBy((int) $premiseId, $user->user_id))) {
+            return $this->premiseTakenResponse($taken);
+        }
+
         $user->update(['role_id' => $newRole->role_id, 'premise_id' => $premiseId]);
 
         // Los permisos cambian de raíz: se cierran sus sesiones para que
@@ -109,6 +113,10 @@ class UserController extends Controller
                 'status' => 1,
                 'message' => 'Solo las cuentas de gestor de predio tienen un predio asignado.',
             ], 422);
+        }
+
+        if ($taken = $this->premiseTakenBy((int) $data['premise_id'], $user->user_id)) {
+            return $this->premiseTakenResponse($taken);
         }
 
         // La sesión abierta no se cierra: el QR siempre se genera con el predio
@@ -190,6 +198,10 @@ class UserController extends Controller
             'premise_id' => ['required', 'integer', 'exists:premises,premise_id'],
         ]);
 
+        if ($taken = $this->premiseTakenBy((int) $data['premise_id'], null)) {
+            return $this->premiseTakenResponse($taken);
+        }
+
         $password = $data['password'] ?? Str::random(20);
         $roleId = Role::whereRaw('UPPER(name) = ?', [Role::MANAGE_PREMISE])->firstOrFail()->role_id;
 
@@ -217,6 +229,51 @@ class UserController extends Controller
         ], 201);
     }
 
+    /** Cambia o regenera la contraseña de una cuenta local de responsable. */
+    public function updatePassword(Request $request, User $user): JsonResponse
+    {
+        $data = $request->validate([
+            'password' => ['sometimes', 'nullable', 'string', 'min:10', 'max:100'],
+        ]);
+
+        if (!$user->isPremiseManager() || $user->username === null) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'Solo las cuentas locales de responsable de predio tienen contraseña propia.',
+            ], 422);
+        }
+
+        $provided = $data['password'] ?? null;
+        $password = $provided ?: Str::random(20);
+        $user->update(['password' => Hash::make($password)]);
+
+        // La contraseña anterior deja de servir: se cierran las sesiones abiertas.
+        UserActiveSession::where('user_id', $user->user_id)->delete();
+
+        return response()->json([
+            'status' => 0,
+            'message' => 'Contraseña actualizada.',
+            'generated_password' => $provided ? null : $password,
+        ], 200);
+    }
+
+    /** Otro responsable (MANAGE_PREMISE) que ya tiene asignado el predio. */
+    private function premiseTakenBy(int $premiseId, ?int $exceptUserId): ?User
+    {
+        return User::where('premise_id', $premiseId)
+            ->when($exceptUserId, fn ($q) => $q->where('user_id', '!=', $exceptUserId))
+            ->whereHas('role', fn ($q) => $q->whereRaw('UPPER(name) = ?', [Role::MANAGE_PREMISE]))
+            ->first();
+    }
+
+    private function premiseTakenResponse(User $holder): JsonResponse
+    {
+        return response()->json([
+            'status' => 1,
+            'message' => "Ese predio ya tiene como responsable a {$holder->name}. "
+                . 'Solo puede haber uno: cámbielo desde Editar predio.',
+        ], 422);
+    }
     //Obtener los datos y el estado de salida del usuario autenticado
     public function leaveStatus(Request $request) : JsonResponse
     {

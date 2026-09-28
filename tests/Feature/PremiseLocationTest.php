@@ -108,8 +108,8 @@ class PremiseLocationTest extends TestCase
 
     private function admin(): static
     {
-        $admin = User::create([
-            'external_identifier' => 'adm', 'name' => 'Admin', 'item' => 1,
+        $admin = User::firstOrCreate(['external_identifier' => 'adm'], [
+            'name' => 'Admin', 'item' => 1,
             'role_id' => Role::where('name', Role::ADMIN)->value('role_id'),
         ]);
 
@@ -178,5 +178,75 @@ class PremiseLocationTest extends TestCase
         $this->manager('lista', $this->premise->premise_id);
         $this->admin()->getJson('/api/admin/premises')->assertOk()
             ->assertJsonPath('data.0.manager.name', 'Gestor lista');
+    }
+
+    // ------------------------------------ un responsable por predio / clave
+
+    public function test_no_se_crea_un_segundo_responsable_para_el_mismo_predio(): void
+    {
+        $this->manager('primero', $this->premise->premise_id);
+        $this->admin()->postJson('/api/admin/users/premise-managers', [
+            'name' => 'Otro', 'username' => 'segundo', 'premise_id' => $this->premise->premise_id,
+        ])->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'Gestor primero'));
+        $this->assertSame(0, User::where('username', 'segundo')->count());
+    }
+
+    public function test_no_se_reasigna_un_predio_ocupado_a_otro_responsable(): void
+    {
+        $this->manager('dueno', $this->premise->premise_id);
+        $otro = $this->manager('otro');
+        $this->admin()->putJson("/api/admin/users/{$otro->user_id}/premise", ['premise_id' => $this->premise->premise_id])
+            ->assertStatus(422);
+        $this->assertNull($otro->fresh()->premise_id);
+    }
+
+    public function test_no_se_asigna_el_rol_gestor_a_un_predio_ocupado(): void
+    {
+        $this->manager('dueno2', $this->premise->premise_id);
+        $emp = User::create(['external_identifier' => 'e2', 'name' => 'E2', 'item' => 77,
+            'role_id' => Role::where('name', Role::EMPLOYEE)->value('role_id')]);
+        $this->admin()->putJson("/api/admin/users/{$emp->user_id}/role", [
+            'role_id' => Role::where('name', Role::MANAGE_PREMISE)->value('role_id'),
+            'premise_id' => $this->premise->premise_id,
+        ])->assertStatus(422);
+    }
+
+    public function test_el_mismo_responsable_puede_reafirmar_su_predio(): void
+    {
+        $m = $this->manager('mismo', $this->premise->premise_id);
+        $this->admin()->putJson("/api/admin/users/{$m->user_id}/premise", ['premise_id' => $this->premise->premise_id])
+            ->assertOk();
+    }
+
+    public function test_el_admin_cambia_la_clave_del_responsable_y_se_cierran_sus_sesiones(): void
+    {
+        $m = $this->manager('clave', $this->premise->premise_id);
+        UserActiveSession::create(['user_id' => $m->user_id, 'session_id' => 's9', 'ip_address' => '1.1.1.1']);
+
+        $this->admin()->putJson("/api/admin/users/{$m->user_id}/password", ['password' => 'nueva-clave-segura-1'])
+            ->assertOk()->assertJsonPath('generated_password', null);
+
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('nueva-clave-segura-1', $m->fresh()->password));
+        $this->assertSame(0, UserActiveSession::where('user_id', $m->user_id)->count());
+    }
+
+    public function test_el_admin_regenera_la_clave_del_responsable(): void
+    {
+        $m = $this->manager('regen', $this->premise->premise_id);
+        $res = $this->admin()->putJson("/api/admin/users/{$m->user_id}/password", [])->assertOk();
+
+        $generated = $res->json('generated_password');
+        $this->assertGreaterThanOrEqual(20, strlen($generated));
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check($generated, $m->fresh()->password));
+    }
+
+    public function test_clave_corta_o_cuenta_que_no_es_responsable_se_rechaza(): void
+    {
+        $m = $this->manager('corta', $this->premise->premise_id);
+        $this->admin()->putJson("/api/admin/users/{$m->user_id}/password", ['password' => 'corta'])->assertStatus(422);
+
+        $emp = User::create(['external_identifier' => 'e3', 'name' => 'E3', 'item' => 78,
+            'role_id' => Role::where('name', Role::EMPLOYEE)->value('role_id')]);
+        $this->admin()->putJson("/api/admin/users/{$emp->user_id}/password", [])->assertStatus(422);
     }
 }
