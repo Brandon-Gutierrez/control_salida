@@ -23,13 +23,21 @@ Al iniciar sesión, una cuenta responsable de predio debe aterrizar directamente
 - El backend deriva el predio del usuario autenticado. El frontend no envía ni elige `premise_id` para esta operación.
 - Si no hay predio asignado o la sesión no autoriza la acción, mostrar el error recibido y volver al login si la sesión ya no es válida.
 
-## Dispositivo autorizado y cambio por Recursos Humanos
+## Aplicaciones permitidas y dispositivo autorizado
 
-- Para las cuentas `EMPLOYEE` de la aplicación móvil, antes del primer inicio de sesión la aplicación crea un identificador aleatorio de instalación (UUID v4 o equivalente, al menos 16 caracteres), lo guarda en almacenamiento seguro del dispositivo y lo conserva aunque se cierre sesión.
-- Enviar ese valor como encabezado `DeviceId` en el login móvil y en las llamadas autenticadas de la aplicación móvil. No generar uno nuevo al cerrar sesión ni en cada inicio. El panel web de `ADMIN` y `MANAGE_PREMISE` no debe enviar ni requiere `DeviceId`.
-- El primer inicio de sesión móvil correcto vincula la cuenta `EMPLOYEE` a ese identificador. Otro identificador recibe `403` con código `DEVICE_CHANGE_REQUIRES_HR`; indicar al usuario que contacte a Recursos Humanos.
-- Recursos Humanos puede revocar las sesiones y liberar el dispositivo anterior mediante `POST /api/admin/users/{user}/device/reset`. Solo un administrador puede llamar esta ruta y no puede restablecer su propia cuenta. Después, el usuario inicia sesión desde el nuevo dispositivo y queda vinculado automáticamente.
-- `GET /api/admin/users` expone `device_bound_at` para que administración vea si una cuenta móvil tiene un dispositivo vinculado y cuándo se vinculó. El identificador original no se devuelve.
+| Aplicación (`X-Client-Platform`) | Roles que pueden entrar | Cambio de dispositivo |
+|---|---|---|
+| `web` (panel) | `ADMIN`, `MANAGE_PREMISE` | Contactar a TI |
+| `mobile` (app de salidas) | `ADMIN`, `EMPLOYEE` | Contactar a Recursos Humanos (admin) |
+
+- Cada aplicación envía en **todas** las peticiones los encabezados `X-Client-Platform` (`web` o `mobile`) y `DeviceId` (identificador aleatorio de al menos 16 caracteres, generado una vez: localStorage en web, almacenamiento seguro en móvil). No se regenera al cerrar sesión.
+- El login sin esos encabezados responde `422` (`CLIENT_PLATFORM_REQUIRED` / `DEVICE_ID_REQUIRED`). Un rol que no usa esa aplicación recibe `403` `PLATFORM_NOT_ALLOWED`.
+- El primer inicio de sesión correcto en cada aplicación vincula la cuenta a ese dispositivo (un `ADMIN` tiene uno web y uno móvil). Otro dispositivo recibe `403` `DEVICE_NOT_AUTHORIZED` con el mensaje de a quién contactar.
+- En cada petición autenticada, un `DeviceId` distinto al vinculado responde `401` `DEVICE_NOT_AUTHORIZED`; una sesión creada antes de este cambio responde `401` `SESSION_PLATFORM_MISSING`. En ambos casos volver al login.
+- Solo hay una sesión activa por cuenta y aplicación: iniciar sesión otra vez en el mismo dispositivo reemplaza la anterior. La sesión se conserva con la cookie de Laravel (navegador / cookie persistida en el teléfono).
+- Administración libera un dispositivo con `POST /api/admin/users/{user}/device/reset` y cuerpo `{"platform": "web" | "mobile"}`; eso también cierra las sesiones de esa aplicación. Un administrador no puede liberar el navegador que está usando.
+- TI puede liberarlo desde el servidor: `php artisan devices:reset {user_id|item|usuario} --platform=web|mobile|all`.
+- `GET /api/admin/users` expone `devices: [{platform, bound_at}]`. El identificador original nunca se devuelve.
 - Cerrar sesión no libera el dispositivo vinculado.
 - El identificador persistido bloquea cambios accidentales, pero el encabezado se puede copiar o falsificar. El cliente debe guardarlo en Keychain/Keystore; para una mayor resistencia se requiere atestación de plataforma. No debe presentarse como una identidad física imposible de clonar.
 

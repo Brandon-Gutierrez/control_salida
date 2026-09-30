@@ -7,6 +7,8 @@ use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserActiveSession;
+use App\Services\DeviceBindingService;
+use App\Support\ClientPlatform;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Carbon;
@@ -23,8 +25,13 @@ class UserController extends Controller
     public function index(): JsonResponse
     {
         $users = User::query()
-            ->select('user_id', 'name', 'item', 'role_id', 'premise_id', 'device_bound_at')
-            ->with(['role:role_id,name', 'premise:premise_id,name', 'leavePolicy'])
+            ->select('user_id', 'name', 'item', 'role_id', 'premise_id', 'username')
+            ->with([
+                'role:role_id,name',
+                'premise:premise_id,name',
+                'leavePolicy',
+                'devices:id,user_id,platform,bound_at',
+            ])
             ->orderBy('name')
             ->get();
 
@@ -158,33 +165,42 @@ class UserController extends Controller
         ], 200);
     }
 
-    /** Revoca las sesiones y permite que la cuenta se vincule a un dispositivo nuevo. */
-    public function resetUserDevice(Request $request, User $user): JsonResponse
+    /**
+     * Desvincula el dispositivo de una cuenta en una aplicación (web o mobile)
+     * y cierra sus sesiones ahí, para que pueda entrar desde uno nuevo.
+     */
+    public function resetUserDevice(Request $request, User $user, DeviceBindingService $devices): JsonResponse
     {
-        if (strtoupper($user->role?->name ?? '') !== 'EMPLOYEE') {
-            return response()->json([
-                'status' => 1,
-                'message' => 'La vinculación de dispositivo solo aplica a cuentas de la aplicación móvil.',
-            ], 422);
-        }
-
-        if ($request->user()->user_id === $user->user_id) {
-            return response()->json([
-                'status' => 1,
-                'message' => 'Otro administrador debe realizar el cambio de dispositivo de esta cuenta.',
-            ], 422);
-        }
-
-        $user->update([
-            'device_id' => null,
-            'device_bound_at' => null,
+        $data = $request->validate([
+            'platform' => ['required', 'string', 'in:' . implode(',', ClientPlatform::ALL)],
         ]);
-        $user->activeSession()->delete();
+        $platform = $data['platform'];
+
+        if (!ClientPlatform::allows($platform, $user->role?->name)) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'Esta cuenta no usa esa aplicación, no tiene dispositivo que desvincular.',
+            ], 422);
+        }
+
+        // Quitar el propio navegador cerraría la sesión desde la que se pide.
+        if ($request->user()->user_id === $user->user_id
+            && $request->session()->get(ClientPlatform::SESSION_KEY) === $platform) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'No puede desvincular el dispositivo que está usando. Pídalo a otro administrador o a TI.',
+            ], 422);
+        }
+
+        $hadDevice = $devices->reset($user, $platform);
 
         return response()->json([
             'status' => 0,
-            'message' => 'Dispositivo anterior desactivado. El usuario puede iniciar sesión desde su nuevo dispositivo.',
+            'message' => $hadDevice
+                ? 'Dispositivo anterior desactivado. La cuenta puede iniciar sesión desde un dispositivo nuevo.'
+                : 'La cuenta no tenía un dispositivo vinculado en esa aplicación.',
             'user_id' => $user->user_id,
+            'platform' => $platform,
         ], 200);
     }
 

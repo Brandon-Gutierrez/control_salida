@@ -12,6 +12,7 @@ class UserActiveSession extends Model
     protected $fillable = [
         'user_id',
         'session_id',
+        'platform',
         'device_name',
         'ip_address',
         'user_agent',

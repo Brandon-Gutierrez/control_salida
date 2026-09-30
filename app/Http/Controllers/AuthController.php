@@ -3,8 +3,10 @@ namespace App\Http\Controllers;
 
 use App\Models\UserActiveSession;
 use App\Repositories\UserActiveSessionRepository;
+use App\Services\DeviceBindingService;
 use App\Services\ThirdPartyService;
 use App\Repositories\UserRepository;
+use App\Support\ClientPlatform;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,12 +19,33 @@ class AuthController extends Controller
     public function login(Request $request,
         ThirdPartyService $thirdPartyService,
         UserRepository $userRepository,
-        UserActiveSessionRepository $userActiveSessionRepository): JsonResponse
+        UserActiveSessionRepository $userActiveSessionRepository,
+        DeviceBindingService $deviceBindingService): JsonResponse
     {
         $data = $request->validate([
             'username' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
+
+        // Cada aplicación se identifica (web / mobile) y envía el identificador
+        // de su dispositivo: el acceso y la vinculación dependen de ambos.
+        $platform = strtolower((string) $request->header(ClientPlatform::HEADER));
+        if (!ClientPlatform::isValid($platform)) {
+            return response()->json([
+                'status' => 'ERROR',
+                'code' => 'CLIENT_PLATFORM_REQUIRED',
+                'message' => 'La aplicación no se identificó correctamente. Actualícela e intente de nuevo.',
+            ], 422);
+        }
+
+        $deviceId = $request->header('DeviceId');
+        if (!DeviceBindingService::isValidDeviceId($deviceId)) {
+            return response()->json([
+                'status' => 'ERROR',
+                'code' => 'DEVICE_ID_REQUIRED',
+                'message' => 'No se pudo identificar este dispositivo. Actualice la aplicación e intente de nuevo.',
+            ], 422);
+        }
 
         // Las cuentas responsables de predio usan credenciales locales.
         $localUser = User::where('username', $data['username'])->first();
@@ -58,6 +81,16 @@ class AuthController extends Controller
         );
         }
 
+        // web: ADMIN y MANAGE_PREMISE. mobile: ADMIN y EMPLOYEE.
+        $roleName = $user->role?->name;
+        if (!ClientPlatform::allows($platform, $roleName)) {
+            return response()->json([
+                'status' => 'ERROR',
+                'code' => 'PLATFORM_NOT_ALLOWED',
+                'message' => ClientPlatform::roleNotAllowedMessage($platform, $roleName),
+            ], 403);
+        }
+
         // Un responsable sin predio no tiene nada que mostrar y, como no puede
         // cerrar sesión, no se le abre sesión hasta que administración lo asigne.
         if ($user->isPremiseManager() && !$user->premise_id) {
@@ -68,37 +101,15 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // El bloqueo de dispositivo aplica a EMPLOYEE (app móvil); los roles
-        // administrativos y MANAGE_PREMISE acceden desde la versión web.
-        if (strtoupper($user->role?->name ?? '') === 'EMPLOYEE') {
-            $deviceId = $request->header('DeviceId');
-            if (!is_string($deviceId) || strlen($deviceId) < 16 || strlen($deviceId) > 255) {
-                return response()->json([
-                    'status' => 'ERROR',
-                    'message' => 'Falta un identificador de dispositivo válido en el encabezado DeviceId.',
-                ], 422);
-            }
-
-            // El primer acceso vincula la cuenta al dispositivo. La actualización
-            // condicional evita que dos primeros accesos vinculen dos dispositivos.
-            $deviceHash = hash('sha256', $deviceId);
-            if (!$user->device_id) {
-                User::where('user_id', $user->user_id)
-                    ->whereNull('device_id')
-                    ->update([
-                        'device_id' => $deviceHash,
-                        'device_bound_at' => now(),
-                    ]);
-                $user->refresh();
-            }
-
-            if (!$user->device_id || !hash_equals($user->device_id, $deviceHash)) {
-                return response()->json([
-                    'status' => 'ERROR',
-                    'message' => 'La cuenta ya está vinculada a otro dispositivo. Contacte a Recursos Humanos para solicitar el cambio.',
-                    'code' => 'DEVICE_CHANGE_REQUIRES_HR',
-                ], 403);
-            }
+        // Un único dispositivo por cuenta y aplicación: el primero que inicia
+        // sesión queda vinculado; para cambiarlo, administración / TI debe
+        // desvincular el anterior.
+        if (!$deviceBindingService->bindOrVerify($user, $platform, $deviceId)) {
+            return response()->json([
+                'status' => 'ERROR',
+                'code' => 'DEVICE_NOT_AUTHORIZED',
+                'message' => ClientPlatform::deviceNotAuthorizedMessage($platform),
+            ], 403);
         }
 
         //CREAR SESION LARAVEL
@@ -106,20 +117,22 @@ class AuthController extends Controller
 
         //REGENERAR LA SESION
         $request->session()->regenerate();
+        $request->session()->put(ClientPlatform::SESSION_KEY, $platform);
 
         //REGISTRAR LA SESION
+        $sessionId = $request->session()->getId();
         $userActiveSessionRepository->createSession(
             $user->user_id,
-            $request->session()->getId(),
+            $sessionId,
+            $platform,
             (string) $request->header('User-Agent'),
             (string) $request->ip(),
             (string) $request->userAgent(),
         );
 
-        //LIMITAR SESIONES CONCURRENTES: 1 para empleados, hasta 5 para administradores.
-        //Se conservan las usadas más recientemente y se cierran las demás.
-        $maxSessions = strtoupper($user->role?->name ?? '') === 'ADMIN' ? 5 : 1;
-        $userActiveSessionRepository->enforceSessionLimit($user->user_id, $maxSessions);
+        // Una sola sesión activa por aplicación: la nueva reemplaza a la anterior
+        // (p. ej. si se borraron las cookies en el mismo dispositivo).
+        $userActiveSessionRepository->keepOnlySession($user->user_id, $platform, $sessionId);
 
         return response()->json([
             'status' => 'SUCCESS',

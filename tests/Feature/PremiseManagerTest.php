@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
+use Tests\Concerns\SignsInWithDevice;
 use Tests\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use Tests\TestCase;
 class PremiseManagerTest extends TestCase
 {
     use RefreshDatabase;
+    use SignsInWithDevice;
 
     private Role $employeeRole;
     private Role $adminRole;
@@ -65,7 +67,7 @@ class PremiseManagerTest extends TestCase
     /** Peticiones autenticadas sin depender de la cookie de sesión del navegador. */
     private function as(User $user): static
     {
-        return $this->withoutMiddleware(CheckActiveSession::class)->actingAs($user, 'web');
+        return $this->signIn($user);
     }
 
     // ---------------------------------------------------------------- login
@@ -80,7 +82,7 @@ class PremiseManagerTest extends TestCase
     {
         $this->makeManager();
 
-        $response = $this->postJson('/api/auth/login', ['username' => 'gestor1', 'password' => 'clave-segura-123']);
+        $response = $this->login('gestor1', 'clave-segura-123');
 
         $response->assertOk()
             ->assertJsonPath('user.role.name', 'MANAGE_PREMISE')
@@ -92,7 +94,7 @@ class PremiseManagerTest extends TestCase
     {
         $this->makeManager();
 
-        $this->postJson('/api/auth/login', ['username' => 'gestor1', 'password' => 'otra-clave'])
+        $this->login('gestor1', 'otra-clave')
             ->assertStatus(401);
         $this->assertDatabaseCount('user_active_sessions', 0);
     }
@@ -102,7 +104,7 @@ class PremiseManagerTest extends TestCase
         $manager = $this->makeManager();
         $manager->update(['premise_id' => null]);
 
-        $this->postJson('/api/auth/login', ['username' => 'gestor1', 'password' => 'clave-segura-123'])
+        $this->login('gestor1', 'clave-segura-123')
             ->assertStatus(403)
             ->assertJsonPath('code', 'PREMISE_NOT_ASSIGNED');
         $this->assertDatabaseCount('user_active_sessions', 0);
@@ -115,7 +117,7 @@ class PremiseManagerTest extends TestCase
             'password' => Hash::make('clave-segura-123'),
         ]);
 
-        $this->postJson('/api/auth/login', ['username' => 'empleado1', 'password' => 'clave-segura-123'])
+        $this->login('empleado1', 'clave-segura-123')
             ->assertStatus(401);
     }
 
@@ -266,7 +268,7 @@ class PremiseManagerTest extends TestCase
         Auth::forgetGuards();
         Auth::shouldUse('web');
 
-        $this->postJson('/api/auth/login', ['username' => 'ana_gestora', 'password' => $generated])
+        $this->login('ana_gestora', $generated)
             ->assertOk();
     }
 

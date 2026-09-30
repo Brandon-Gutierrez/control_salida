@@ -12,12 +12,14 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
+use Tests\Concerns\SignsInWithDevice;
 use Tests\TestCase;
 
 /** Validación de ubicación (50 m) y gestión de predios con coordenadas y responsable. */
 class PremiseLocationTest extends TestCase
 {
     use RefreshDatabase;
+    use SignsInWithDevice;
 
     private const LAT = -17.3935;   // El Prado, Cochabamba
     private const LNG = -66.1570;
@@ -113,7 +115,7 @@ class PremiseLocationTest extends TestCase
             'role_id' => Role::where('name', Role::ADMIN)->value('role_id'),
         ]);
 
-        return $this->withoutMiddleware(CheckActiveSession::class)->actingAs($admin, 'web');
+        return $this->signIn($admin);
     }
 
     private function manager(string $u, ?int $premiseId = null): User

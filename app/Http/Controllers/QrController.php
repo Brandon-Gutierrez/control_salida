@@ -15,8 +15,19 @@ use Throwable;
 
 class QrController extends Controller
 {
-    private const QR_TTL_SECONDS = 300;
+    // El valor visible del QR es configurable por administración: ver
+    // SettingsController::qrTtlSeconds().
+    // Esta misma gracia es, además, la ventana que tiene el usuario para
+    // elegir el motivo tras escanear: si escanea justo en el último segundo
+    // de vida del QR, todavía cuenta con estos 30 segundos para confirmar
+    // su salida (ver LEAVE_TICKET_TTL_SECONDS).
     private const QR_GRACE_PERIOD_SECONDS = 30;
+
+    // Ventana visible para elegir el motivo tras escanear: igual a la gracia
+    // del QR. Se le suma una gracia interna adicional (invisible) para que
+    // un envío justo en el límite no falle por la latencia de la red.
+    private const LEAVE_TICKET_TTL_SECONDS = 30;
+    private const LEAVE_TICKET_GRACE_PERIOD_SECONDS = 10;
 
     protected UserRepository $userRepository;
     protected RecordRepository $recordRepository;
@@ -36,7 +47,7 @@ class QrController extends Controller
         $premiseId = $premise->premise_id;
 
         $token = $premiseName . '+' . Str::uuid();
-        $visibleTtl = self::QR_TTL_SECONDS;
+        $visibleTtl = SettingsController::qrTtlSeconds();
         $redisTtl = $visibleTtl + self::QR_GRACE_PERIOD_SECONDS;
         $issuedAt = now();
 
@@ -225,9 +236,13 @@ class QrController extends Controller
                 'user_id' => $request->user()->user_id,
                 'premise_id' => (int) $qrStatus,
             ]);
+            $ticketRedisTtl = self::LEAVE_TICKET_TTL_SECONDS + self::LEAVE_TICKET_GRACE_PERIOD_SECONDS;
             try {
-                Redis::setex('leave-ticket:' . $leaveTicket, 300, $ticketPayload);
-                $ticketTtl = (int) Redis::ttl('leave-ticket:' . $leaveTicket);
+                // Igual que el QR: se guarda con una gracia interna adicional
+                // que no se muestra al usuario, para que un envío justo en el
+                // límite del contador visible no falle por la latencia de red.
+                Redis::setex('leave-ticket:' . $leaveTicket, $ticketRedisTtl, $ticketPayload);
+                $ticketRemainingTtl = (int) Redis::ttl('leave-ticket:' . $leaveTicket);
             } catch (Throwable $exception) {
                 Log::error('No se pudo crear el ticket de confirmación de salida.', [
                     'user_id' => $request->user()->user_id,
@@ -237,11 +252,12 @@ class QrController extends Controller
                 return $this->temporaryFailure('LEAVE_TICKET_UNAVAILABLE');
             }
 
-            if ($ticketTtl < 1) {
+            $ticketVisibleTtl = max(0, $ticketRemainingTtl - self::LEAVE_TICKET_GRACE_PERIOD_SECONDS);
+            if ($ticketVisibleTtl < 1) {
                 return $this->temporaryFailure('LEAVE_TICKET_UNAVAILABLE');
             }
 
-            $ticketExpiresAt = now()->addSeconds($ticketTtl)->toIso8601String();
+            $ticketExpiresAt = now()->addSeconds($ticketVisibleTtl)->toIso8601String();
 
             return response()->json([
                 'status' => 0,
@@ -249,7 +265,7 @@ class QrController extends Controller
                 // qrData remains as a backward-compatible alias for existing clients.
                 'qrData' => $leaveTicket,
                 'leaveTicket' => $leaveTicket,
-                'leaveTicketTTL' => $ticketTtl,
+                'leaveTicketTTL' => $ticketVisibleTtl,
                 'leaveTicketExpiresAt' => $ticketExpiresAt,
                 'message' => 'QR escaneado correctamente',
             ], 200);
