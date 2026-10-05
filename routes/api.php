@@ -33,6 +33,7 @@ Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->g
     // La cuenta del responsable no puede acceder a las funciones de empleados.
     Route::middleware(['check.platform:mobile', 'check.authorization:EMPLOYEE,ADMIN'])->group(function () {
         Route::get('/me/leave-status', [UserController::class, 'leaveStatus'])->name('me.leave-status');
+        Route::get('/me/leave-stats', [UserController::class, 'leaveStats'])->name('me.leave-stats');
         Route::post('/qr/scan', [QrController::class, 'scan'])
             ->middleware('check.premise.location')->name('qr.scan');
         Route::get('/premises/{premise:name}/reasons', [LeaveController::class, 'premiseReasons'])->name('premises.reasons');
@@ -62,8 +63,6 @@ Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->g
 
             Route::get('/roles', [UserController::class, 'roles'])->name('roles.index');
             Route::get('/users', [UserController::class, 'index'])->name('users.index');
-            Route::get('/users/{user}/leave-policy', [UserController::class, 'leavePolicy'])->name('users.leave-policy.show');
-            Route::put('/users/{user}/leave-policy', [UserController::class, 'updateLeavePolicy'])->name('users.leave-policy.update');
             Route::put('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.role.update');
             Route::put('/users/{user}/password', [UserController::class, 'updatePassword'])->name('users.password.update');
             Route::put('/users/{user}/premise', [UserController::class, 'assignPremise'])->name('users.premise.update');
@@ -72,5 +71,7 @@ Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->g
 
             Route::get('/settings/qr', [SettingsController::class, 'show'])->name('settings.qr.show');
             Route::put('/settings/qr', [SettingsController::class, 'update'])->name('settings.qr.update');
+            Route::get('/settings/leave-limits', [SettingsController::class, 'showLeaveLimits'])->name('settings.leave-limits.show');
+            Route::put('/settings/leave-limits', [SettingsController::class, 'updateLeaveLimits'])->name('settings.leave-limits.update');
         });
 });

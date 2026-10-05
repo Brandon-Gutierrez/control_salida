@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use App\Models\UserActiveSession;
 use App\Repositories\UserActiveSessionRepository;
 use App\Services\DeviceBindingService;
+use App\Services\EmployeeProfileService;
 use App\Services\ThirdPartyService;
 use App\Repositories\UserRepository;
 use App\Support\ClientPlatform;
@@ -137,8 +138,20 @@ class AuthController extends Controller
         return response()->json([
             'status' => 'SUCCESS',
             'message' => 'Inicio de sesión exitoso.',
-            'user' => $user->load(['role', 'premise']),
+            'user' => $this->userPayload($user),
         ], 200);
+    }
+
+    /** Usuario con su rol y predio, más foto y cargo del servicio de terceros. */
+    private function userPayload(User $user): array
+    {
+        $profile = app(EmployeeProfileService::class)->forUser($user);
+
+        return $user->load(['role', 'premise'])->toArray() + [
+            'photo_url' => $profile['photo_url'],
+            'job_title' => $profile['job_title'],
+            'area' => $profile['area'],
+        ];
     }
 
     //Usuario autenticado de la sesion actual
@@ -146,7 +159,7 @@ class AuthController extends Controller
     {
         return response()->json([
             'status' => 'SUCCESS',
-            'user' => $request->user()->load(['role', 'premise']),
+            'user' => $this->userPayload($request->user()),
         ], 200);
     }
 

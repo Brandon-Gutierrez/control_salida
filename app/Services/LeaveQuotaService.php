@@ -3,45 +3,69 @@
 namespace App\Services;
 
 use App\Models\Record;
+use App\Models\Setting;
 use App\Models\User;
 use Carbon\Carbon;
 
+/** Límite de salidas general: se aplica igual a todas las personas. */
 class LeaveQuotaService
 {
+    public const PERIODS = ['day', 'week', 'month'];
+
+    /** @return array{period: string, max_exits: ?int, max_exits_per_premise: ?int} */
+    public static function policy(): array
+    {
+        $period = Setting::get('leave_limit_period', 'day');
+        $int = fn (?string $v) => ($v === null || $v === '') ? null : (int) $v;
+
+        return [
+            'period' => in_array($period, self::PERIODS, true) ? $period : 'day',
+            'max_exits' => $int(Setting::get('leave_limit_max_exits')),
+            'max_exits_per_premise' => $int(Setting::get('leave_limit_max_per_premise')),
+        ];
+    }
+
+    public static function savePolicy(string $period, ?int $maxExits, ?int $maxPerPremise): void
+    {
+        Setting::set('leave_limit_period', $period);
+        Setting::set('leave_limit_max_exits', $maxExits === null ? '' : (string) $maxExits);
+        Setting::set('leave_limit_max_per_premise', $maxPerPremise === null ? '' : (string) $maxPerPremise);
+    }
+
     /** Returns a limit error payload when the next exit is not allowed. */
     public function check(User $user, int $premiseId): ?array
     {
-        $policy = $user->leavePolicy;
-        if (!$policy || (!$policy->max_exits && !$policy->max_exits_per_premise)) {
+        $policy = self::policy();
+        if (!$policy['max_exits'] && !$policy['max_exits_per_premise']) {
             return null;
         }
 
-        [$start, $end] = $this->periodBounds($policy->period);
+        [$start, $end] = $this->periodBounds($policy['period']);
         $records = Record::query()
             ->where('user_id', $user->user_id)
             ->whereBetween('leave_time', [$start, $end]);
 
         $totalCount = (clone $records)->count();
-        if ($policy->max_exits !== null && $totalCount >= $policy->max_exits) {
+        if ($policy['max_exits'] !== null && $totalCount >= $policy['max_exits']) {
             return [
                 'limit_type' => 'total',
-                'allowed' => $policy->max_exits,
+                'allowed' => $policy['max_exits'],
                 'used' => $totalCount,
-                'period' => $policy->period,
+                'period' => $policy['period'],
             ];
         }
 
-        if ($policy->max_exits_per_premise !== null) {
+        if ($policy['max_exits_per_premise'] !== null) {
             $premiseCount = (clone $records)
                 ->whereHas('reasonPremise', fn ($query) => $query->where('premise_id', $premiseId))
                 ->count();
 
-            if ($premiseCount >= $policy->max_exits_per_premise) {
+            if ($premiseCount >= $policy['max_exits_per_premise']) {
                 return [
                     'limit_type' => 'premise',
-                    'allowed' => $policy->max_exits_per_premise,
+                    'allowed' => $policy['max_exits_per_premise'],
                     'used' => $premiseCount,
-                    'period' => $policy->period,
+                    'period' => $policy['period'],
                 ];
             }
         }

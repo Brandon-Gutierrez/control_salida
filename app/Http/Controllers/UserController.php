@@ -8,6 +8,8 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\UserActiveSession;
 use App\Services\DeviceBindingService;
+use App\Services\EmployeeProfileService;
+use App\Services\LeaveStatsService;
 use App\Support\ClientPlatform;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -29,7 +31,6 @@ class UserController extends Controller
             ->with([
                 'role:role_id,name',
                 'premise:premise_id,name',
-                'leavePolicy',
                 'devices:id,user_id,platform,bound_at',
             ])
             ->orderBy('name')
@@ -136,34 +137,6 @@ class UserController extends Controller
         ], 200);
     }
 
-    /** Obtiene los límites de salida configurados para una cuenta. */
-    public function leavePolicy(User $user): JsonResponse
-    {
-        return response()->json([
-            'status' => 0,
-            'data' => $user->leavePolicy,
-        ], 200);
-    }
-
-    /** Define o actualiza los límites periódicos de salida de una cuenta. */
-    public function updateLeavePolicy(Request $request, User $user): JsonResponse
-    {
-        $data = $request->validate([
-            'period' => ['required', 'string', 'in:day,week,month'],
-            'max_exits' => ['present', 'nullable', 'integer', 'min:1', 'max:1000'],
-            'max_exits_per_premise' => ['present', 'nullable', 'integer', 'min:1', 'max:1000'],
-        ]);
-
-        $policy = $user->leavePolicy()->updateOrCreate(
-            ['user_id' => $user->user_id],
-            $data,
-        );
-
-        return response()->json([
-            'status' => 0,
-            'data' => $policy,
-        ], 200);
-    }
 
     /**
      * Desvincula el dispositivo de una cuenta en una aplicación (web o mobile)
@@ -290,6 +263,29 @@ class UserController extends Controller
                 . 'Solo puede haber uno: cámbielo desde Editar predio.',
         ], 422);
     }
+    /** Rol, foto y cargo (servicio de terceros) y estadísticas de salidas (base local). */
+    private function profileExtras(User $user): array
+    {
+        $profile = app(EmployeeProfileService::class)->forUser($user);
+
+        return [
+            'role' => $user->role?->name,
+            'photo_url' => $profile['photo_url'],
+            'job_title' => $profile['job_title'],
+            'area' => $profile['area'],
+            'stats' => app(LeaveStatsService::class)->forUser($user),
+        ];
+    }
+
+    /** Estadísticas de salidas del usuario autenticado: día, semana y mes en curso. */
+    public function leaveStats(Request $request): JsonResponse
+    {
+        return response()->json([
+            'status' => 0,
+            'data' => app(LeaveStatsService::class)->forUser($request->user()),
+        ], 200);
+    }
+
     //Obtener los datos y el estado de salida del usuario autenticado
     public function leaveStatus(Request $request) : JsonResponse
     {
@@ -335,6 +331,7 @@ class UserController extends Controller
                 "item" => $userData->json("item") ??$userData["item"],
                 "token" => $userData->json("token"),
                 "isLeave" => false,
+            ...$this->profileExtras($authUser),
             ], 200);
         }
         //Sino
@@ -363,6 +360,7 @@ class UserController extends Controller
             "isLeave" => true,
             "dateLeave" => $dateLeave,
             "reason" => $reasonName,
+            ...$this->profileExtras($authUser),
         ], 200);
     }
 }
