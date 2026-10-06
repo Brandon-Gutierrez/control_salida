@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Models\Role;
 use App\Models\User;
 use App\Models\Record;
 
@@ -10,15 +11,23 @@ class UserRepository
     //Registrar usuario
     public function registerUser(String $external_identifier, String $name, String $item) : User
     {
-        return User::updateOrCreate(
-            [
-            'external_identifier'=> $external_identifier,
-            ], 
-            [
-            'name'=> $name,
-            'item'=> $item,
-            ]
-        );
+        $user = User::firstWhere('external_identifier', $external_identifier);
+
+        if ($user) {
+            $user->update(['name' => $name, 'item' => $item]);
+            return $user;
+        }
+
+        // Si la base se creó sin sembrar los roles, el primer usuario nuevo
+        // fallaba por la llave foránea: se garantiza que EMPLOYEE exista.
+        $role = Role::firstOrCreate(['name' => Role::EMPLOYEE]);
+
+        return User::create([
+            'external_identifier' => $external_identifier,
+            'name' => $name,
+            'item' => $item,
+            'role_id' => $role->role_id,
+        ]);
     }
     //Obtener el id del usuario mediante el item
     public function getUserId(String $external_identifier) : ?int
