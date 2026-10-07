@@ -5,8 +5,10 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Record;
 
 
+// Consulta registros de salida.
 class RecordRepository
 {
+    // Verifica si pertenece al mismo predio.
     public function isSamePremise(int $userId, int $premiseId): bool
     {
         $record = Record::where('user_id', $userId)

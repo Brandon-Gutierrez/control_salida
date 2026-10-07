@@ -4,6 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// Define los cambios de la migración.
 return new class extends Migration
 {
     /**
@@ -11,6 +12,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Define las columnas de la tabla.
         Schema::create('reasons', function (Blueprint $table) {
             $table->id('reason_id');
             $table->string('name'); //motivo de salida

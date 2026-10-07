@@ -7,6 +7,7 @@ use App\Services\LeaveQuotaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+// Gestiona la configuración.
 class SettingsController extends Controller
 {
     private const QR_TTL_KEY = 'qr_ttl_seconds';
@@ -20,6 +21,7 @@ class SettingsController extends Controller
         return (int) Setting::get(self::QR_TTL_KEY, (string) self::QR_TTL_DEFAULT);
     }
 
+    // Muestra la configuración.
     public function show(): JsonResponse
     {
         return response()->json([
@@ -32,6 +34,7 @@ class SettingsController extends Controller
         ], 200);
     }
 
+    // Muestra los límites de salida.
     public function showLeaveLimits(): JsonResponse
     {
         return response()->json(['status' => 0, 'data' => LeaveQuotaService::policy()], 200);
@@ -51,6 +54,7 @@ class SettingsController extends Controller
         return response()->json(['status' => 0, 'data' => LeaveQuotaService::policy()], 200);
     }
 
+    // Actualiza el registro recibido.
     public function update(Request $request): JsonResponse
     {
         $data = $request->validate([

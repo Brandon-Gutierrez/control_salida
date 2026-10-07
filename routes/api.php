@@ -19,10 +19,13 @@ use Illuminate\Support\Facades\Route;
 |   - Administrador (app web): /api/admin/*
 */
 
+// Define el comportamiento de esta ruta.
+// Responde al estado del servicio.
 Route::get('/health', fn () => response()->json(['status' => 'OK']))->name('health');
 
 Route::post('/auth/login', [AuthController::class, 'login'])->name('auth.login');
 
+// Agrupa las rutas de este acceso.
 Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->group(function () {
 
     // Sesión
@@ -43,6 +46,7 @@ Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->g
 
     Route::prefix('manager')->name('manager.')
         ->middleware(['check.platform:web', 'check.authorization:' . Role::MANAGE_PREMISE])
+        // Agrupa las rutas de este acceso.
         ->group(function () {
             Route::post('/qr-token', [QrController::class, 'storeForResponsible'])->name('qr-token.store');
         });
@@ -51,6 +55,7 @@ Route::middleware(['auth:sanctum', 'check.active.session', 'check.deviceid'])->g
     Route::prefix('admin')
         ->name('admin.')
         ->middleware(['check.platform:web', 'check.authorization:ADMIN'])
+        // Agrupa las rutas de este acceso.
         ->group(function () {
             Route::get('/premises', [PremiseController::class, 'index'])->name('premises.index');
             Route::post('/premises', [PremiseController::class, 'store'])->name('premises.store');

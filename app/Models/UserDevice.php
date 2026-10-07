@@ -14,11 +14,13 @@ class UserDevice extends Model
 
     protected $hidden = ['device_hash'];
 
+    // Define las conversiones de atributos.
     protected function casts(): array
     {
         return ['bound_at' => 'datetime'];
     }
 
+    // Obtiene el usuario relacionado.
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');

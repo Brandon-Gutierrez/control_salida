@@ -4,8 +4,10 @@ namespace App\Repositories;
 use App\Models\ReasonPremise;
 use App\Models\ReasonLeave;
 
+// Gestiona motivos de salida.
 class ReasonLeaveRepository
 {
+    // Sincroniza los motivos.
     public function syncReasons(array $reasonsData): array
     {
         $SomeNew = [];
@@ -24,6 +26,7 @@ class ReasonLeaveRepository
         }
         return $SomeNew;
     }
+    // Obtiene el código del motivo.
     public function getCodeReason(String $nameReason): ?string
     {
     $codeReason = ReasonLeave::where('name', $nameReason)->value('code');

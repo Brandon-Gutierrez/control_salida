@@ -15,10 +15,12 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class CheckDeviceId
 {
+    // Inicializa sus dependencias.
     public function __construct(private DeviceBindingService $devices)
     {
     }
 
+    // Procesa la solicitud.
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();

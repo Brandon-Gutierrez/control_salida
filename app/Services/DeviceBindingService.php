@@ -12,6 +12,7 @@ class DeviceBindingService
     public const MIN_ID_LENGTH = 16;
     public const MAX_ID_LENGTH = 255;
 
+    // Verifica la condición indicada.
     public static function isValidDeviceId(mixed $deviceId): bool
     {
         return is_string($deviceId)
@@ -35,6 +36,7 @@ class DeviceBindingService
         return hash_equals($device->device_hash, $hash);
     }
 
+    // Verifica el dispositivo vinculado.
     public function matches(User $user, string $platform, mixed $deviceId): bool
     {
         if (!self::isValidDeviceId($deviceId)) {

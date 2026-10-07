@@ -3,8 +3,10 @@ namespace App\Repositories;
 
 use App\Models\UserActiveSession;
 
+// Gestiona sesiones activas.
 class UserActiveSessionRepository
 {
+    // Crea una sesión activa.
     public function createSession(
         int $userId,
         string $sessionId,

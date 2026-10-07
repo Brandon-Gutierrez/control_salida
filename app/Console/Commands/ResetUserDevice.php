@@ -19,6 +19,7 @@ class ResetUserDevice extends Command
 
     protected $description = 'Desvincula el dispositivo autorizado de una cuenta para que pueda usar uno nuevo';
 
+    // Procesa la solicitud.
     public function handle(DeviceBindingService $devices): int
     {
         $key = (string) $this->argument('user');

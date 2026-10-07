@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+// Representa una sesión activa.
 class UserActiveSession extends Model
 {
     protected $table = 'user_active_sessions';
@@ -18,6 +19,7 @@ class UserActiveSession extends Model
         'user_agent',
     ];
 
+    // Obtiene el usuario relacionado.
     public function user(): BelongsTo
     {
         return $this->belongsTo(

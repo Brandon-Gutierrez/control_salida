@@ -13,11 +13,13 @@ class Setting extends Model
     protected $keyType = 'string';
     protected $fillable = ['key', 'value'];
 
+    // Obtiene un valor de configuración.
     public static function get(string $key, ?string $default = null): ?string
     {
         return self::query()->find($key)?->value ?? $default;
     }
 
+    // Guarda un valor de configuración.
     public static function set(string $key, string $value): void
     {
         self::query()->updateOrCreate(['key' => $key], ['value' => $value]);

@@ -25,6 +25,7 @@ class LeaveQuotaService
         ];
     }
 
+    // Guarda la política de límites.
     public static function savePolicy(string $period, ?int $maxExits, ?int $maxPerPremise): void
     {
         Setting::set('leave_limit_period', $period);
@@ -73,6 +74,7 @@ class LeaveQuotaService
         return null;
     }
 
+    // Prepara la respuesta de rechazo.
     public function rejectionPayload(array $limit): array
     {
         $limitLabel = $limit['limit_type'] === 'total'
@@ -90,6 +92,7 @@ class LeaveQuotaService
         ];
     }
 
+    // Calcula el periodo aplicable.
     private function periodBounds(string $period): array
     {
         $now = now();

@@ -6,6 +6,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\Record;
 
+// Gestiona usuarios y salidas.
 class UserRepository
 {
     //Registrar usuario
@@ -34,6 +35,7 @@ class UserRepository
     {
         return User::where('external_identifier', $external_identifier)->value('id');
     }
+    // Obtiene los datos del usuario.
     public function getUserData(int $userId) : User
     {
         return User::where('id', $userId)->first();

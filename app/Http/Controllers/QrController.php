@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Client\ConnectionException;
 use Throwable;
 
+// Gestiona los códigos QR.
 class QrController extends Controller
 {
     // El valor visible del QR es configurable por administración: ver
@@ -33,6 +34,7 @@ class QrController extends Controller
     protected RecordRepository $recordRepository;
     protected LeaveQuotaService $leaveQuotaService;
 
+    // Inicializa sus dependencias.
     public function __construct(UserRepository $userRepository, RecordRepository $recordRepository, LeaveQuotaService $leaveQuotaService)
     {
         $this->userRepository = $userRepository;
@@ -330,6 +332,7 @@ class QrController extends Controller
         );
     }
 
+    // Genera una respuesta de error temporal.
     private function temporaryFailure(string $code, bool $retryable = true)
     {
         return response()->json([

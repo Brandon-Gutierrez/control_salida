@@ -10,6 +10,7 @@ use Symfony\Component\HttpFoundation\Response;
 /** Restringe una ruta a las aplicaciones indicadas (p. ej. check.platform:web). */
 class CheckPlatform
 {
+    // Procesa la solicitud.
     public function handle(Request $request, Closure $next, string ...$platforms): Response
     {
         if (!in_array($request->session()->get(ClientPlatform::SESSION_KEY), $platforms, true)) {

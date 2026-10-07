@@ -21,6 +21,7 @@ use Illuminate\Support\Str;
 use App\Repositories\UserRepository;
 
 
+// Gestiona los usuarios.
 class UserController extends Controller
 {
     //Lista todos los usuarios registrados con su rol 
@@ -255,6 +256,7 @@ class UserController extends Controller
             ->first();
     }
 
+    // Procesa la operación solicitada.
     private function premiseTakenResponse(User $holder): JsonResponse
     {
         return response()->json([

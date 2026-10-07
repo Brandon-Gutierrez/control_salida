@@ -5,6 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+// Define los cambios de la migración.
 return new class extends Migration
 {
     public function up(): void
@@ -24,6 +25,7 @@ return new class extends Migration
         // Las vinculaciones anteriores eran de la app móvil. Un CHAR(64) vacío
         // queda relleno de espacios: esos valores no son un dispositivo real.
         DB::table('users')->whereNotNull('device_id')->orderBy('user_id')
+            // Define las columnas de la tabla.
             ->each(function ($user) {
                 $hash = trim((string) $user->device_id);
                 if (strlen($hash) !== 64) {
@@ -39,6 +41,7 @@ return new class extends Migration
                 ]);
             });
 
+        // Define las columnas de la tabla.
         Schema::table('users', function (Blueprint $table) {
             $table->dropColumn(['device_id', 'device_bound_at']);
         });
@@ -51,16 +54,19 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Define las columnas de la tabla.
         Schema::table('user_active_sessions', function (Blueprint $table) {
             $table->dropColumn('platform');
         });
 
+        // Define las columnas de la tabla.
         Schema::table('users', function (Blueprint $table) {
             $table->char('device_id', 64)->nullable();
             $table->timestamp('device_bound_at')->nullable();
         });
 
         DB::table('user_devices')->where('platform', 'mobile')->orderBy('id')
+            // Procesa el elemento indicado.
             ->each(fn ($device) => DB::table('users')
                 ->where('user_id', $device->user_id)
                 ->update(['device_id' => $device->device_hash, 'device_bound_at' => $device->bound_at]));

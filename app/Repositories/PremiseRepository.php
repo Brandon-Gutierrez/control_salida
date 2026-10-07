@@ -7,19 +7,23 @@ use App\Models\ReasonLeave;
 use App\Models\Role;
 use Illuminate\Support\Collection;
 
+// Consulta y transforma predios.
 class PremiseRepository
 {
+    // Obtiene el identificador del predio.
     public function getPremiseId(string $name): ?int
     {
         return Premise::where('name', $name)->value('premise_id');
     }
 
+    // Lista los predios con sus motivos.
     public function getAllWithReasons(): Collection
     {
         return Premise::query()
             ->select('premise_id', 'name', 'latitude', 'longitude', 'created_at')
             ->with(['responsibleUsers' => fn ($q) => $q->select('user_id', 'name', 'premise_id')
                     ->whereHas('role', fn ($r) => $r->whereRaw('UPPER(name) = ?', [Role::MANAGE_PREMISE])),
+                // Calcula el valor solicitado.
                 'leaves' => function ($query) {
                 $query->select('reasons.reason_id', 'reasons.name')
                     ->orderBy('reasons.name');
@@ -37,6 +41,7 @@ class PremiseRepository
         $premise->unsetRelation('leaves');
     }
 
+    // Convierte el predio a recurso.
     public function toResource(Premise $premise): array
     {
         return [

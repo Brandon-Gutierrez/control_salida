@@ -4,6 +4,7 @@ namespace App\Repositories;
 use App\Models\ReasonPremise;
 use App\Models\ReasonLeave;
 
+// Consulta motivos por predio.
 class ReasonPremiseRepository
 {
     //Obtener las salidas de un predio

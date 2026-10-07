@@ -15,8 +15,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 
+// Gestiona la autenticación.
 class AuthController extends Controller
 {
+    // Inicia sesión.
     public function login(Request $request,
         ThirdPartyService $thirdPartyService,
         UserRepository $userRepository,

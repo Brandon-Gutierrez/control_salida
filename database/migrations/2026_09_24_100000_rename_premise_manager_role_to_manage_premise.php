@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
+// Define los cambios de la migración.
 return new class extends Migration
 {
     /** El rol del responsable de predio pasa a llamarse MANAGE_PREMISE. */

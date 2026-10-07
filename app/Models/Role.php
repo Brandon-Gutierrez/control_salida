@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+// Representa un rol.
 class Role extends Model
 {
     public const EMPLOYEE = 'EMPLOYEE';
@@ -16,6 +17,7 @@ class Role extends Model
     protected $fillable = [
         "name",
     ];
+    // Procesa la operación solicitada.
     public function users()
     {
         return $this->HasMany(

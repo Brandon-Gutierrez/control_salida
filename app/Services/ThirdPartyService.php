@@ -4,8 +4,10 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 
+// Gestiona la autenticación externa.
 class ThirdPartyService
 {
+    // Autentica las credenciales.
     public function authenticate(string $username, string $password): ?array {
         
         $response = Http::withHeaders([

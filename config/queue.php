@@ -1,5 +1,6 @@
 <?php
 
+// Define las opciones de queue.
 return [
 
     /*

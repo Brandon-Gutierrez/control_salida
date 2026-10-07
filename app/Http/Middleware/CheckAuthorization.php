@@ -6,8 +6,10 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
+// Valida los permisos del usuario.
 class CheckAuthorization
 {
+    // Procesa la solicitud.
     public function handle(
         Request $request,
         Closure $next,

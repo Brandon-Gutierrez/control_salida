@@ -15,6 +15,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
+// Gestiona las salidas.
 class LeaveController extends Controller
 {
     //constructor 
@@ -25,11 +26,13 @@ class LeaveController extends Controller
     protected LeaveQuotaService $leaveQuotaService;
 
     
-    public function __construct(ReasonPremiseRepository $reasonPremiseRepository,
-                                UserRepository $userRepository,
-                                ReasonLeaveRepository $reasonLeaveRepository,
-                                PremiseRepository $premiseRepository,
-                                LeaveQuotaService $leaveQuotaService)
+    // Inicializa sus dependencias.
+    public function __construct(
+        ReasonPremiseRepository $reasonPremiseRepository,
+        UserRepository $userRepository,
+        ReasonLeaveRepository $reasonLeaveRepository,
+        PremiseRepository $premiseRepository,
+        LeaveQuotaService $leaveQuotaService)
     {
         $this->reasonPremiseRepository = $reasonPremiseRepository;
         $this->userRepository = $userRepository;
@@ -250,6 +253,7 @@ class LeaveController extends Controller
         ], 200);
     }
 
+    // Genera una respuesta de error temporal.
     private function temporaryFailure(string $code, bool $retryable = true)
     {
         return response()->json([

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+// Representa la política de salida.
 class UserLeavePolicy extends Model
 {
     protected $table = 'user_leave_policies';
@@ -16,6 +17,7 @@ class UserLeavePolicy extends Model
         'max_exits_per_premise',
     ];
 
+    // Obtiene el usuario relacionado.
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');

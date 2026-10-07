@@ -13,6 +13,7 @@ use Carbon\Carbon;
  */
 class LeaveStatsService
 {
+    // Obtiene los datos del usuario.
     public function forUser(User $user): array
     {
         $now = now();

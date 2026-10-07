@@ -37,6 +37,7 @@ class EmployeeProfileService
 
         return $profile;
     }
+    // Consulta los datos externos.
     private function fetch(int $item): ?array
     {
         try {

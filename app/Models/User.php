@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+// Representa un usuario.
 class User extends Authenticatable
 {
     use HasFactory, Notifiable;
@@ -44,12 +45,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(Record::class);
     }
+    // Obtiene los motivos relacionados.
     public function reasonPremise()
     {
         return $this->belongsToMany(ReasonPremise::class, 'records')
         ->using(Record::class)
         ->withPivot('leave_time', 'return_time');
     }
+    // Obtiene el rol del usuario.
     public function role()
     {
         return $this->belongsTo(
@@ -59,6 +62,7 @@ class User extends Authenticatable
         );
     }
 
+    // Obtiene la sesión activa.
     public function activeSession()
     {
     return $this->hasOne(
@@ -74,6 +78,7 @@ class User extends Authenticatable
         return $this->hasMany(UserDevice::class, 'user_id', 'user_id');
     }
 
+    // Obtiene el predio del usuario.
     public function premise()
     {
         return $this->belongsTo(Premise::class, 'premise_id', 'premise_id');
@@ -85,6 +90,7 @@ class User extends Authenticatable
         return strtoupper($this->role?->name ?? '') === Role::MANAGE_PREMISE;
     }
 
+    // Obtiene la política de salida.
     public function leavePolicy()
     {
         return $this->hasOne(UserLeavePolicy::class, 'user_id', 'user_id');

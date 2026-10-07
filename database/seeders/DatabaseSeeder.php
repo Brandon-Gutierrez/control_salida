@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Role;
 use Illuminate\Database\Seeder;
 
+// Carga los datos iniciales.
 class DatabaseSeeder extends Seeder
 {
     /**

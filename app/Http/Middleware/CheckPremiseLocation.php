@@ -8,12 +8,14 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
+// Valida la ubicación del predio.
 class CheckPremiseLocation
 {
     private const MAX_RADIUS_METERS = 50;
     private const MAX_AGE_SECONDS = 120;
     private const MAX_FUTURE_SECONDS = 15;
 
+    // Procesa la solicitud.
     public function handle(Request $request, Closure $next): Response
     {
         $data = $request->validate([
@@ -79,6 +81,7 @@ class CheckPremiseLocation
         ], 403);
     }
 
+    // Calcula la distancia en metros.
     private function distanceInMeters(float $latitudeA, float $longitudeA, float $latitudeB, float $longitudeB): float
     {
         $earthRadius = 6_371_000;

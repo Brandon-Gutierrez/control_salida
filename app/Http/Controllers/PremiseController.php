@@ -13,8 +13,10 @@ use App\Repositories\PremiseRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+// Gestiona los predios.
 class PremiseController extends Controller
 {
+    // Inicializa sus dependencias.
     public function __construct(
         protected PremiseRepository $premiseRepository
     ) {}
@@ -143,6 +145,7 @@ class PremiseController extends Controller
             }
         }
 
+        // Calcula el valor solicitado.
         DB::transaction(function () use ($premise, $newManager) {
             $previous = User::where('premise_id', $premise->premise_id)
                 ->when($newManager, fn ($q) => $q->where('user_id', '!=', $newManager->user_id))

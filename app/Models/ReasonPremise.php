@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
+// Relaciona motivos y predios.
 class ReasonPremise extends Pivot
 {
     use HasFactory;
@@ -23,15 +24,18 @@ class ReasonPremise extends Pivot
         'deleted_at' => 'datetime',
     ];
 
+    // Procesa la operación solicitada.
     public function leave()
     {
         return $this->belongsTo(ReasonLeave::class, 'reason_id', 'reason_id');
     }
 
+    // Obtiene el predio del usuario.
     public function premise()
     {
         return $this->belongsTo(Premise::class, 'premise_id', 'premise_id');
     }
+    // Procesa la operación solicitada.
     public function users(){
         return $this->belongsToMany(User::class, 'records')
         ->using(Record::class)

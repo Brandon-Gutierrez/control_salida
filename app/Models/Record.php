@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\Pivot;
 
+// Representa un registro de salida.
 class Record extends Pivot
 {
     protected $table = 'records';
@@ -19,10 +20,12 @@ class Record extends Pivot
         'reason_premise_id',
     ];
 
+    // Obtiene el usuario relacionado.
     public function user()
     {
         return $this->belongsTo(User::class);
     }
+    // Obtiene los motivos relacionados.
     public function reasonPremise()
     {
         return $this->belongsTo(ReasonPremise::class, 'reason_premise_id');
