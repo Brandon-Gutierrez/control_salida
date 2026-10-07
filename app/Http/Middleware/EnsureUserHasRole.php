@@ -6,37 +6,32 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-// Valida los permisos del usuario.
-class CheckAuthorization
+/** Restringe una ruta a los roles indicados (p. ej. `role:EMPLOYEE,ADMIN`). */
+class EnsureUserHasRole
 {
-    // Procesa la solicitud.
-    public function handle(
-        Request $request,
-        Closure $next,
-        ...$roles
-    ): Response {
-
+    public function handle(Request $request, Closure $next, string ...$roles): Response
+    {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'status' => 'ERROR',
-                'message' => 'Usuario no autenticado.'
+                'message' => 'Usuario no autenticado.',
             ], 401);
         }
 
-        if (!$user->role) {
+        if (! $user->role) {
             return response()->json([
                 'status' => 'ERROR',
-                'message' => 'El usuario no tiene un rol asignado.'
+                'message' => 'El usuario no tiene un rol asignado.',
             ], 403);
         }
 
         $allowedRoles = array_map('strtoupper', $roles);
-        if (!in_array(strtoupper($user->role->name), $allowedRoles, true)) {
+        if (! in_array(strtoupper($user->role->name), $allowedRoles, true)) {
             return response()->json([
                 'status' => 'ERROR',
-                'message' => 'No tiene permisos para realizar esta acción.'
+                'message' => 'No tiene permisos para realizar esta acción.',
             ], 403);
         }
 

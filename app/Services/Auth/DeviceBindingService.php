@@ -1,18 +1,20 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Auth;
 
 use App\Models\User;
-use App\Models\UserActiveSession;
 use App\Models\UserDevice;
+use App\Repositories\UserActiveSessionRepository;
 
 /** Vincula cada cuenta a un único dispositivo por aplicación (web / mobile). */
 class DeviceBindingService
 {
     public const MIN_ID_LENGTH = 16;
+
     public const MAX_ID_LENGTH = 255;
 
-    // Verifica la condición indicada.
+    public function __construct(private UserActiveSessionRepository $sessions) {}
+
     public static function isValidDeviceId(mixed $deviceId): bool
     {
         return is_string($deviceId)
@@ -36,10 +38,10 @@ class DeviceBindingService
         return hash_equals($device->device_hash, $hash);
     }
 
-    // Verifica el dispositivo vinculado.
+    /** El dispositivo recibido es el vinculado a la cuenta en esa aplicación. */
     public function matches(User $user, string $platform, mixed $deviceId): bool
     {
-        if (!self::isValidDeviceId($deviceId)) {
+        if (! self::isValidDeviceId($deviceId)) {
             return false;
         }
 
@@ -62,9 +64,7 @@ class DeviceBindingService
             ->where('platform', $platform)
             ->delete();
 
-        UserActiveSession::where('user_id', $user->user_id)
-            ->where(fn ($q) => $q->where('platform', $platform)->orWhereNull('platform'))
-            ->delete();
+        $this->sessions->deleteForPlatform($user->user_id, $platform);
 
         return $deleted > 0;
     }

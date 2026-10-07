@@ -1,35 +1,49 @@
-<?php 
+<?php
+
 namespace App\Repositories;
 
-use App\Models\ReasonPremise;
-use App\Models\ReasonLeave;
+use App\Models\LeaveReason;
+use Illuminate\Support\Collection;
 
-// Gestiona motivos de salida.
-class ReasonLeaveRepository
+class LeaveReasonRepository
 {
-    // Sincroniza los motivos.
-    public function syncReasons(array $reasonsData): array
+    /** Nombres de todos los motivos, ordenados alfabéticamente. */
+    public function allNames(): Collection
     {
-        $SomeNew = [];
-        foreach ($reasonsData as $reason){
-            $object = ReasonLeave::firstOrNew(['code' => $reason['codigo']]);
-            $object->name = $reason['descripcion'];
+        return LeaveReason::orderBy('name')->pluck('name');
+    }
 
-            $isNew = !$object->exists;
-            $isDirty = $object->isDirty();
-            $object->save();
+    public function findIdByName(string $name): ?int
+    {
+        return LeaveReason::where('name', $name)->value('reason_id');
+    }
 
-            if ($isNew|| $isDirty)
-            {
-                $SomeNew[] = $object->toArray();
+    public function findCodeByName(string $name): ?string
+    {
+        return LeaveReason::where('name', $name)->value('code');
+    }
+
+    /**
+     * Crea o actualiza los motivos recibidos del sistema externo.
+     *
+     * @return array<int, array> Motivos nuevos o modificados.
+     */
+    public function sync(array $externalReasons): array
+    {
+        $changed = [];
+
+        foreach ($externalReasons as $externalReason) {
+            $reason = LeaveReason::firstOrNew(['code' => $externalReason['codigo']]);
+            $reason->name = $externalReason['descripcion'];
+
+            $isChanged = ! $reason->exists || $reason->isDirty();
+            $reason->save();
+
+            if ($isChanged) {
+                $changed[] = $reason->toArray();
             }
         }
-        return $SomeNew;
-    }
-    // Obtiene el código del motivo.
-    public function getCodeReason(String $nameReason): ?string
-    {
-    $codeReason = ReasonLeave::where('name', $nameReason)->value('code');
-    return $codeReason;
+
+        return $changed;
     }
 }

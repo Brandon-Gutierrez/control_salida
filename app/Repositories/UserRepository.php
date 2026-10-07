@@ -4,18 +4,21 @@ namespace App\Repositories;
 
 use App\Models\Role;
 use App\Models\User;
-use App\Models\Record;
+use Illuminate\Database\Eloquent\Collection;
 
-// Gestiona usuarios y salidas.
 class UserRepository
 {
-    //Registrar usuario
-    public function registerUser(String $external_identifier, String $name, String $item) : User
+    /**
+     * Crea o actualiza la cuenta de una persona que se autenticó en el sistema
+     * externo. Las cuentas nuevas son EMPLEADOS.
+     */
+    public function upsertFromExternal(string $externalIdentifier, string $name, string $item): User
     {
-        $user = User::firstWhere('external_identifier', $external_identifier);
+        $user = User::firstWhere('external_identifier', $externalIdentifier);
 
         if ($user) {
             $user->update(['name' => $name, 'item' => $item]);
+
             return $user;
         }
 
@@ -24,64 +27,63 @@ class UserRepository
         $role = Role::firstOrCreate(['name' => Role::EMPLOYEE]);
 
         return User::create([
-            'external_identifier' => $external_identifier,
+            'external_identifier' => $externalIdentifier,
             'name' => $name,
             'item' => $item,
             'role_id' => $role->role_id,
         ]);
     }
-    //Obtener el id del usuario mediante el item
-    public function getUserId(String $external_identifier) : ?int
+
+    public function create(array $attributes): User
     {
-        return User::where('external_identifier', $external_identifier)->value('id');
-    }
-    // Obtiene los datos del usuario.
-    public function getUserData(int $userId) : User
-    {
-        return User::where('id', $userId)->first();
+        return User::create($attributes);
     }
 
-    //Verifica si el usuario es admin
-    public function isUserAdmin(String $item) : bool
+    public function find(int $userId): ?User
     {
-        $userId = $this->getUserId($item);
-
-        if (!$userId) return false;
-        $isAdmin = User::where([
-            'id'=> $userId,
-            'role_id' => 2,
-        ])->first();
-        if (!$isAdmin) return false;
-        return true;
+        return User::find($userId);
     }
 
-    //Obtner si el usuario esta con salida marcada
-    public function isUserLeave(?int $userId) : ?Record
+    public function findByUsername(string $username): ?User
     {
-        return Record::where('user_id', $userId)
-            ->whereNull('return_time')
-            ->latest('leave_time')
+        return User::where('username', $username)->first();
+    }
+
+    /** Busca por usuario local, o —si es numérico— por user_id o item. */
+    public function findByLoginKey(string $key): ?User
+    {
+        return User::where('username', $key)
+            ->orWhere(fn ($query) => ctype_digit($key)
+                ? $query->where('user_id', (int) $key)->orWhere('item', (int) $key)
+                : $query->whereRaw('1 = 0'))
             ->first();
     }
 
-    //Registrar la salida temporal del usuario
-    public function registerLeave(int $userId, int $reason_premise_id) : Record
+    public function itemExists(int $item): bool
     {
-        return Record::create([
-            'leave_time'=> now(),
-            'return_time'=> null,
-            'user_id'=> $userId,
-            'reason_premise_id'=> $reason_premise_id,
-        ]);
+        return User::where('item', $item)->exists();
     }
 
-    //Registrar el retorno del usuario
-    public function registerReturn(int $userId) : int
+    /** Todas las cuentas con su rol, predio y dispositivos, ordenadas por nombre. */
+    public function allForAdmin(): Collection
     {
-        return Record::where('user_id', $userId)
-            ->whereNull('return_time')
-            ->update([
-            'return_time'=> now(),
-        ]);
+        return User::query()
+            ->select('user_id', 'name', 'item', 'role_id', 'premise_id', 'username')
+            ->with([
+                'role:role_id,name',
+                'premise:premise_id,name',
+                'devices:id,user_id,platform,bound_at',
+            ])
+            ->orderBy('name')
+            ->get();
+    }
+
+    /** Responsables del predio, sin contar a `$exceptUserId`. */
+    public function premiseManagersOf(int $premiseId, ?int $exceptUserId = null): Collection
+    {
+        return User::where('premise_id', $premiseId)
+            ->when($exceptUserId, fn ($query) => $query->where('user_id', '!=', $exceptUserId))
+            ->premiseManagers()
+            ->get();
     }
 }

@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Premise;
-use App\Models\ReasonLeave;
+use App\Models\LeaveReason;
 use App\Models\ReasonPremise;
 use App\Models\Record;
 use App\Models\Role;
@@ -34,7 +34,7 @@ class LeaveStatsTest extends TestCase
             'external_identifier' => 'e1', 'name' => 'Juan', 'item' => 2057, 'role_id' => $role->role_id,
         ]);
         $premise = Premise::create(['name' => 'Prado', 'latitude' => -17.39, 'longitude' => -66.15]);
-        $reason = ReasonLeave::create(['name' => 'Trámite', 'code' => 'T']);
+        $reason = LeaveReason::create(['name' => 'Trámite', 'code' => 'T']);
         $this->reasonPremiseId = DB::table('reason_premise')->insertGetId([
             'reason_id' => $reason->reason_id, 'premise_id' => $premise->premise_id,
         ]);

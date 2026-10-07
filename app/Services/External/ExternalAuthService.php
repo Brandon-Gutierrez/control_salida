@@ -1,32 +1,28 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\External;
 
-use Illuminate\Support\Facades\Http;
-
-// Gestiona la autenticación externa.
-class ThirdPartyService
+/** Autentica credenciales contra el sistema externo de personal. */
+class ExternalAuthService
 {
-    // Autentica las credenciales.
-    public function authenticate(string $username, string $password): ?array {
-        
-        $response = Http::withHeaders([
-            'keysoftware' => env('KEY_SOFTWARE'),
-            'Content-Type' => 'application/json',
-            ])->post(env('API_LOGIN'), [ 
-            'username' => $username,
-            'password' => $password
-        ]);
-        //Verifica si hay un error en los datos 
-        if ($response->failed() || $response->json("status") == 1)
-        {
-            //retorna esetado de error
+    public function __construct(private ExternalApiService $api) {}
+
+    /**
+     * @return array{external_identifier: mixed, name: mixed, item: mixed}|null
+     *                                                                          null si las credenciales no son válidas o el servicio falla.
+     */
+    public function authenticate(string $username, string $password): ?array
+    {
+        $response = $this->api->login($username, $password);
+
+        if ($response->failed() || $response->json('status') == 1) {
             return null;
         }
+
         return [
-            'external_identifier' => $response->json("token"),
-            'name' => $response->json("name"),
-            'item' => $response->json("item"),
+            'external_identifier' => $response->json('token'),
+            'name' => $response->json('name'),
+            'item' => $response->json('item'),
         ];
     }
 }

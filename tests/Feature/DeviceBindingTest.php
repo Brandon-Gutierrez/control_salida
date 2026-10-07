@@ -256,7 +256,7 @@ class DeviceBindingTest extends TestCase
     {
         $user = $this->externalUser('juan', $this->employeeRole);
 
-        $this->withoutMiddleware(\App\Http\Middleware\CheckActiveSession::class)
+        $this->withoutMiddleware(\App\Http\Middleware\EnsureActiveSession::class)
             ->actingAs($user, 'web')
             ->withHeader('DeviceId', self::PHONE)
             ->getJson('/api/auth/me')

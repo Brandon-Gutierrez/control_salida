@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\User;
-use App\Services\DeviceBindingService;
+use App\Repositories\UserRepository;
+use App\Services\Auth\DeviceBindingService;
 use App\Support\ClientPlatform;
 use Illuminate\Console\Command;
 
@@ -19,18 +19,14 @@ class ResetUserDevice extends Command
 
     protected $description = 'Desvincula el dispositivo autorizado de una cuenta para que pueda usar uno nuevo';
 
-    // Procesa la solicitud.
-    public function handle(DeviceBindingService $devices): int
+    public function handle(UserRepository $users, DeviceBindingService $devices): int
     {
         $key = (string) $this->argument('user');
-        $user = User::where('username', $key)
-            ->orWhere(fn ($q) => ctype_digit($key)
-                ? $q->where('user_id', (int) $key)->orWhere('item', (int) $key)
-                : $q->whereRaw('1 = 0'))
-            ->first();
+        $user = $users->findByLoginKey($key);
 
-        if (!$user) {
+        if (! $user) {
             $this->error("No se encontró la cuenta \"{$key}\".");
+
             return self::FAILURE;
         }
 
@@ -38,6 +34,7 @@ class ResetUserDevice extends Command
         $platforms = $option === 'all' ? ClientPlatform::ALL : [$option];
         if (array_diff($platforms, ClientPlatform::ALL)) {
             $this->error('La opción --platform debe ser web, mobile o all.');
+
             return self::FAILURE;
         }
 

@@ -16,7 +16,7 @@ class DatabaseSeeder extends Seeder
         // Una migración deja MANAGE_PREMISE creado antes que los demás; si
         // nadie lo usa se recrea para que los ids queden en el orden correcto.
         $manage = Role::where('name', 'MANAGE_PREMISE')->first();
-        if ($manage && !Role::where('name', 'EMPLOYEE')->exists() && !$manage->users()->exists()) {
+        if ($manage && ! Role::where('name', 'EMPLOYEE')->exists() && ! $manage->users()->exists()) {
             $manage->delete();
         }
 

@@ -27,70 +27,96 @@ Flujo principal: `routes/api.php` aplica autenticación y middleware; los contro
 
 ## 3. Aplicación (`app/`)
 
-### Comandos, eventos y soporte
+Capas, de afuera hacia adentro: **middleware** (acceso) → **Form Request** (validación) → **controlador** (solo traduce HTTP) → **servicio** (reglas y casos de uso) → **repositorio** (consultas) → **modelo**. Los errores esperados (regla incumplida, servicio externo caído) se lanzan como `ApiException` y Laravel los responde en JSON; los controladores solo describen el camino feliz.
+
+### Comandos, excepciones y soporte
 
 | Archivo | Qué hace y relaciones | Mejora recomendada |
 |---|---|---|
-| `app/Console/Commands/ResetUserDevice.php` | Comando CLI para desvincular/reiniciar el dispositivo asociado a una cuenta; relacionado con `UserDevice` y `DeviceBindingService`. | Validar argumentos con mensajes claros, auditar quién/cuándo ejecutó el reset y cubrir autorización operativa. |
-| `app/Events/QrScanned.php` | Evento de dominio/aplicación ligado al escaneo QR; puede conectar el flujo con listeners/broadcasting. | Aclarar si realmente se despacha y qué datos transporta; mantenerlo inmutable y sin datos sensibles innecesarios. |
-| `app/Support/ClientPlatform.php` | Centraliza identificador de plataforma, roles compatibles y mensajes de acceso para web/móvil; usada por autenticación y middleware. | Convertir valores/mensajes a configuración o enums/objetos de valor, y mantener una sola política probada. |
+| `app/Console/Commands/ResetUserDevice.php` | `php artisan devices:reset`: desvincula el dispositivo de una cuenta (para TI); usa `UserRepository` y `DeviceBindingService`. | Auditar quién/cuándo ejecutó el reset. |
+| `app/Exceptions/ApiException.php` | Error esperado de la API con su cuerpo JSON y código HTTP. Dos formatos heredados de los clientes: numérico (`status: 1`) y textual (`status: "ERROR"`). Registrada en `bootstrap/app.php` para no reportarse como fallo. | Unificar ambos formatos en una versión nueva de la API. |
+| `app/Support/ClientPlatform.php` | Plataformas (`web`, `mobile`), encabezado/clave de sesión, qué roles entran a cada una y sus mensajes. Usada por autenticación y middleware. | Convertir a enum. |
+| `app/Support/Geo.php` | Distancia en metros entre dos coordenadas (haversine). La usa `EnsurePremiseLocation`. | — |
 
-### Controladores HTTP
+### Controladores HTTP (`app/Http/Controllers/`)
 
-| Archivo | Qué hace y relaciones | Mejora recomendada |
+Todos son delgados: validan con un Form Request, llaman a un servicio/repositorio y arman la respuesta.
+
+| Archivo | Qué hace y relaciones |
+|---|---|
+| `AuthController.php` | Login (`AuthService` + apertura de la sesión), `me` y logout. |
+| `LeaveController.php` | `store`: confirma la salida (`LeaveRegistrationService`). |
+| `LeaveStatusController.php` / `LeaveStatsController.php` | Estado de salida y estadísticas de la persona autenticada (invocables). |
+| `LeaveLimitController.php` | Lee/actualiza el límite general de salidas (`LeaveLimitService`). |
+| `QrController.php` | Genera el token del QR de un predio: administración (`store`) o el responsable (`storeForManager`). |
+| `QrScanController.php` | Escaneo de un QR (`QrScanService`), invocable. |
+| `QrSettingsController.php` | Lee/actualiza el tiempo de vida del QR (`QrSettingsService`). |
+| `PremiseController.php` | Listado, alta y edición de predios (con responsable y motivos). |
+| `PremiseReasonController.php` | Motivos de un predio: consulta (app móvil) y reemplazo (administración). |
+| `PremiseManagerController.php` | Alta de cuentas locales de responsable de predio. |
+| `ReasonController.php` | Catálogo de motivos y su sincronización con el sistema externo. |
+| `RoleController.php` | Catálogo de roles. |
+| `UserController.php` | Listado de cuentas, cambio de rol, predio y contraseña, y desvinculación de dispositivo. |
+
+### Form Requests y Resources
+
+`app/Http/Requests/` contiene una clase por endpoint con sus reglas de validación (`LoginRequest`, `ScanQrRequest`, `StoreLeaveRequest`, `StorePremiseRequest`, `UpdatePremiseRequest`, `UpdatePremiseReasonsRequest`, `UpdateUserRoleRequest`, `AssignUserPremiseRequest`, `ResetUserDeviceRequest`, `CreatePremiseManagerRequest`, `UpdateUserPasswordRequest`, `UpdateQrSettingsRequest`, `UpdateLeaveLimitsRequest`). `app/Http/Resources/PremiseResource.php` da formato al predio con su responsable y motivos.
+
+### Middleware (`app/Http/Middleware/`)
+
+| Archivo | Alias | Qué hace |
 |---|---|---|
-| `app/Http/Controllers/Controller.php` | Clase base de controladores Laravel. | Conservarla ligera; evitar que se convierta en un contenedor de lógica compartida no relacionada. |
-| `app/Http/Controllers/AuthController.php` | Inicio/cierre de sesión y consulta del usuario. Coordina autenticación externa/local, rol/plataforma, dispositivo vinculado y sesión activa. | Extraer login/logout a casos de uso; usar Form Requests, transacción para persistencia de sesión/vinculación y respuestas API uniformes. |
-| `app/Http/Controllers/LeaveController.php` | Sincroniza motivos externos, lista motivos por predio y registra salidas usando repositorios y `LeaveQuotaService`. | Reducir responsabilidades; mover sincronización HTTP a cliente dedicado y registro de salida a caso de uso transaccional. |
-| `app/Http/Controllers/PremiseController.php` | Endpoints administrativos de predios y asociación de motivos; usa `PremiseRepository` y modelos relacionados. | Form Requests, Policies y respuestas Resource; controlar concurrencia y evitar consultas/reglas complejas en controlador. |
-| `app/Http/Controllers/QrController.php` | Emite/valida tokens QR para predios y responsables; asociado a settings, usuarios y flujo de salida. | Separar creación/verificación de tokens a servicio dedicado; definir caducidad, firma, rotación y límites de intentos como política explícita. |
-| `app/Http/Controllers/SettingsController.php` | Lee y actualiza ajustes globales de QR desde el panel admin; usa `Setting`. | Validación tipada y caché invalidable; limitar qué claves se pueden modificar y registrar auditoría de cambios. |
-| `app/Http/Controllers/UserController.php` | Administra usuarios, roles, asignaciones, políticas de salida, contraseñas y reset de dispositivo; también consulta estado del empleado. | Dividir API administrativa y consultas del usuario; usar Form Requests, Policies, Resources y casos de uso específicos. |
+| `EnsureActiveSession.php` | `active.session` | La sesión debe seguir registrada como activa; actualiza su actividad. |
+| `EnsureDeviceIsBound.php` | `device.bound` | Plataforma de la sesión, rol permitido en ella y dispositivo vinculado (`DeviceBindingService`). |
+| `EnsureClientPlatform.php` | `platform:web` / `platform:mobile` | Restringe la ruta a una aplicación. |
+| `EnsureUserHasRole.php` | `role:ADMIN,…` | Restringe la ruta a ciertos roles. |
+| `EnsurePremiseLocation.php` | `premise.location` | Ubicación a menos de 50 m de un predio, reciente y sin GPS simulado/VPN (ver `docs/validacion-ubicacion.md`). |
 
-### Middleware
+### Modelos Eloquent (`app/Models/`)
 
-| Archivo | Qué hace y relaciones | Mejora recomendada |
-|---|---|---|
-| `app/Http/Middleware/CheckActiveSession.php` | Exige que la sesión Laravel actual exista en `user_active_sessions` y actualiza su actividad. | Usar relación/servicio de sesión, índice apropiado y definir estrategia para evitar escrituras `touch()` en cada petición si la carga lo requiere. |
-| `app/Http/Middleware/CheckAuthorization.php` | Verifica usuario y rol contra los roles autorizados de la ruta. | Preferir Policies/Gates para permisos por recurso; centralizar códigos y formato de errores. |
-| `app/Http/Middleware/CheckDeviceId.php` | Verifica plataforma guardada en sesión, rol permitido y coincidencia del dispositivo a través de `DeviceBindingService`. | Hacer explícito el orden de middleware y el contrato del header; añadir pruebas de sesión antigua, dispositivo ausente y rol cambiado. |
-| `app/Http/Middleware/CheckPlatform.php` | Restringe rutas a plataforma(s) web/móvil permitidas según sesión. | Usar enum/objeto de valor y política compartida con login para no duplicar reglas. |
-| `app/Http/Middleware/CheckPremiseLocation.php` | Valida coordenadas, precisión, antigüedad y señales de spoofing; calcula distancia a predios antes de continuar. | Extraer geocálculo a servicio probado; buscar candidatos por bounding box/índice espacial; mantener límites configurables y reconocer que GPS/VPN del cliente no son prueba criptográfica de ubicación. |
+| Archivo | Qué representa |
+|---|---|
+| `User.php` | Persona (empleado, administrador o responsable de predio). Scope `premiseManagers()`; relaciones con rol, predio y dispositivos. |
+| `Role.php` | Rol y constantes `EMPLOYEE`, `ADMIN`, `MANAGE_PREMISE`. |
+| `Premise.php` | Predio, con sus motivos (`reasons()`) y responsables (`managers()`). |
+| `LeaveReason.php` | Motivo de salida del catálogo (tabla `reasons`). |
+| `ReasonPremise.php` | Motivo habilitado en un predio (tabla pivote `reason_premise`). |
+| `Record.php` | Salida de una persona y su retorno (`records`). |
+| `Setting.php` | Configuración global clave-valor (tiempo de vida del QR, límites de salidas). |
+| `UserDevice.php` | Dispositivo autorizado por cuenta y aplicación (guarda solo el hash). |
+| `UserActiveSession.php` | Sesión activa de una cuenta en una aplicación. |
 
-### Modelos Eloquent
+### Servicios (`app/Services/`)
 
-| Archivo | Qué hace y relaciones | Mejora recomendada |
-|---|---|---|
-| `app/Models/Premise.php` | Representa `premises`; se relaciona con motivos mediante pivote y con usuarios responsables. | Declarar tipos de retorno de relaciones, casts de coordenadas y política clara de borrado/soft deletes. |
-| `app/Models/ReasonLeave.php` | Catálogo de motivos en `reasons`, relacionado con predios por `ReasonPremise`. | Especificar unicidad del código y relaciones tipadas; definir comportamiento de sincronización/archivado. |
-| `app/Models/ReasonPremise.php` | Pivote entre motivo y predio; también enlaza registros/usuarios según las relaciones actuales. | Revisar si debe ser modelo Eloquent normal en vez de Pivot al tener identidad/registros asociados; precisar cardinalidades. |
-| `app/Models/Record.php` | Representa una salida y su retorno en `records`; pertenece a usuario y a la combinación motivo-predio. | Considerar modelo normal con casts de fechas, estados/invariantes, y transacción/índice que impida salidas abiertas duplicadas. |
-| `app/Models/Role.php` | Catálogo de roles y constantes `EMPLOYEE`, `ADMIN`, `MANAGE_PREMISE`; tiene usuarios. | Preferir permisos/capacidades explícitas si los roles crecen; añadir relaciones tipadas y restricciones de datos. |
-| `app/Models/Setting.php` | Ajustes globales clave-valor; métodos estáticos para leer/escribir. | Validar tipos/esquema de claves y encapsular cache; evitar que valores arbitrarios gobiernen seguridad. |
-| `app/Models/User.php` | Usuario autenticable; relaciones con rol, predio, sesiones, dispositivos, registros y política de salidas. | Tipar todas las relaciones, separar identidad externa de autenticación local si crecen requisitos y proteger asignación masiva por caso de uso. |
-| `app/Models/UserActiveSession.php` | Sesiones activas de usuario, plataforma y metadatos del cliente. | Minimizar retención de IP/User-Agent, añadir índices/únicos según reglas y política de expiración. |
-| `app/Models/UserDevice.php` | Dispositivo autorizado por usuario/plataforma; guarda hash oculto y fecha de vínculo. | Asegurar hash con secreto/algoritmo adecuado, índice único `(user_id, platform)`, rotación/auditoría y política de revocación. |
-| `app/Models/UserLeavePolicy.php` | Límite/cuota de salidas por usuario, periodo y posiblemente predio. | Validar invariantes y unicidad por usuario; definir unidad/ventana temporal con tipos y documentación. |
+| Carpeta / archivo | Responsabilidad |
+|---|---|
+| `Auth/AuthService.php` | Reglas de inicio de sesión: aplicación, dispositivo, credenciales locales o externas, rol, predio. |
+| `Auth/DeviceBindingService.php` | Un dispositivo por cuenta y aplicación: vincular, verificar, desvincular. |
+| `Account/UserRoleService.php` | Cambio de rol de una cuenta. |
+| `Premise/PremiseManagerService.php` | Responsables de predio: asignar, mover, crear cuentas locales, cambiar contraseña. |
+| `External/ExternalApiService.php` | Única puerta al sistema externo de personal (cabecera, URLs desde `config/services.php`, tiempos de espera). |
+| `External/ExternalAuthService.php` | Autentica credenciales contra el sistema externo. |
+| `External/EmployeeIdentityService.php` | Confirma que la cuenta es un empleado vigente. |
+| `External/EmployeeProfileService.php` | Foto y cargo (informativos, con caché). |
+| `Leave/LeaveRegistrationService.php` | Confirma una salida: comprobante, predio, motivo, límite, registro externo y local. |
+| `Leave/LeaveTicketService.php` | Comprobante temporal (Redis) que une un escaneo con su confirmación. |
+| `Leave/LeaveLimitService.php` | Límite general de salidas por período. |
+| `Leave/LeaveStatsService.php` | Salidas y minutos fuera del día, la semana y el mes. |
+| `Leave/LeaveStatusService.php` | Estado de salida para la pantalla principal de la app móvil. |
+| `Leave/LeaveReasonSyncService.php` | Sincroniza el catálogo de motivos con el sistema externo. |
+| `Qr/QrTokenService.php` | Emite los tokens temporales (Redis) del QR de cada predio. |
+| `Qr/QrScanService.php` | Escaneo: inicia la salida o registra el retorno. |
+| `Qr/QrSettingsService.php` | Tiempo de vida del QR configurable. |
 
-### Servicios y repositorios
+### Repositorios (`app/Repositories/`)
 
-| Archivo | Qué hace y relaciones | Mejora recomendada |
-|---|---|---|
-| `app/Services/DeviceBindingService.php` | Valida formato del identificador, lo transforma/compara de forma segura y administra el dispositivo autorizado asociado a usuario/plataforma. | Añadir contrato de almacenamiento, transacciones/índices únicos, rotación del secreto y pruebas de carrera/filtración. |
-| `app/Services/LeaveQuotaService.php` | Calcula y aplica límites de salidas según política/periodo; lo usa el registro de salida. | Precisar semántica del periodo y zona horaria; proteger frente a peticiones simultáneas con transacción/bloqueo o restricción. |
-| `app/Services/ThirdPartyService.php` | Integra autenticación/datos de usuarios con servicio externo. | Usar `config/services.php` en lugar de `env()` directo, timeouts/reintentos controlados, DTO, logging redactado y pruebas con HTTP fake. |
-| `app/Repositories/PremiseRepository.php` | Encapsula consultas y escrituras de predios usadas por controladores. | Evaluar si el repositorio agrega abstracción real sobre Eloquent; preferir consultas enfocadas/casos de uso y tipos de retorno. |
-| `app/Repositories/ReasonLeaveRepository.php` | Consulta/sincroniza el catálogo de motivos. | Hacer sincronización idempotente, definir bajas/actualizaciones y trasladar integración externa a un cliente dedicado. |
-| `app/Repositories/ReasonPremiseRepository.php` | Consulta/actualiza asociaciones motivo-predio. | Usar transacciones y validación de existencia; nombrar métodos según intención y especificar resultados/contratos. |
-| `app/Repositories/RecordRepository.php` | Acceso a registros de salida/retorno. | Centralizar invariantes de estado y concurrencia; evitar consultas duplicadas con `UserRepository`. |
-| `app/Repositories/UserActiveSessionRepository.php` | Crea, consulta y limita sesiones activas por usuario/plataforma. Lo usa autenticación/middleware. | Definir límites como política, agregar índices y ejecutar reemplazos en transacción. |
-| `app/Repositories/UserRepository.php` | Registra/consulta usuarios y algunas operaciones de salida/retorno. | Evitar mezcla de persistencia de usuario y flujo de salidas; consolidar nombres/IDs y devolver tipos anulables correctos. |
+`UserRepository`, `RoleRepository`, `PremiseRepository`, `LeaveReasonRepository`, `ReasonPremiseRepository`, `RecordRepository` y `UserActiveSessionRepository` encapsulan las consultas Eloquent; cada método vive en el repositorio de la entidad que consulta.
 
 ### Proveedores
 
-| Archivo | Qué hace y relaciones | Mejora recomendada |
-|---|---|---|
-| `app/Providers/AppServiceProvider.php` | Punto de registro de servicios de la aplicación en el contenedor Laravel. | Registrar bindings/interfaces aquí solo cuando exista una necesidad clara; mantener configuración fuera de lógica de negocio. |
+| Archivo | Qué hace y relaciones |
+|---|---|
+| `app/Providers/AppServiceProvider.php` | Proveedor vacío (no hay bindings propios todavía). |
 
 ## 4. Arranque y configuración
 
@@ -101,7 +127,7 @@ Flujo principal: `routes/api.php` aplica autenticación y middleware; los contro
 | `bootstrap/cache/.gitignore` | Evita versionar cachés de bootstrap. | Conservar; generar cachés durante despliegue reproducible. |
 | `config/app.php` | Nombre, entorno, zona horaria, locale, cifrado y parámetros generales. | Configurar zona horaria/locale de negocio conscientemente y no almacenar secretos fuera del entorno. |
 | `config/auth.php` | Guards, proveedores y modelo de autenticación. Se relaciona con `User` y Sanctum. | Revisar guard usado por rutas de sesión y documentar el modelo/clave primaria no convencional. |
-| `config/broadcasting.php` | Conexiones para difusión de eventos. Se relaciona potencialmente con `QrScanned` y Reverb. | Eliminar conexiones no usadas y documentar configuración de tiempo real si forma parte del producto. |
+| `config/broadcasting.php` | Conexiones para difusión de eventos. Hoy ningún código emite eventos ni usa Reverb. | Retirar junto con `config/reverb.php` y el paquete `laravel/reverb` (`composer remove laravel/reverb`) si no habrá tiempo real. |
 | `config/cache.php` | Almacenes y prefijo de caché Laravel. | Elegir backend por entorno y planificar invalidación/aislamiento entre despliegues. |
 | `config/cors.php` | Orígenes y métodos permitidos para clientes web. | Restringir orígenes de producción al mínimo y documentar dominios por ambiente. |
 | `config/database.php` | Conexiones y opciones de base de datos. | Usar índices/constraints en migraciones y parámetros seguros de producción; monitorear conexiones. |
@@ -111,7 +137,7 @@ Flujo principal: `routes/api.php` aplica autenticación y middleware; los contro
 | `config/queue.php` | Conexiones y comportamiento de colas. | Usar trabajos para sincronizaciones externas lentas y definir reintentos/idempotencia si aplica. |
 | `config/reverb.php` | Configuración del servidor de broadcasting Reverb. | Documentar su uso real, autenticación de canales y secretos por ambiente. |
 | `config/sanctum.php` | Dominios stateful, autenticación por cookies y expiración Sanctum. | Alinear dominios/cookies con frontend y validar CSRF/sesiones en despliegue. |
-| `config/services.php` | Credenciales y endpoints para servicios externos. | Colocar aquí toda configuración de integraciones y consumirla vía `config()`, no `env()` desde clases. |
+| `config/services.php` | Credenciales y endpoints del sistema externo de personal (`external_api`), leídos con `config()` desde `ExternalApiService`. | Mantener aquí toda configuración de integraciones; nunca `env()` fuera de `config/`. |
 | `config/session.php` | Driver, duración, cookie y almacenamiento de sesiones. | Usar cookie segura/HTTP-only/SameSite correcto en producción y alinear expiración con sesiones activas. |
 
 ## 5. Base de datos (`database/`)
@@ -151,10 +177,8 @@ Las migraciones son la historia versionada del esquema; deben ser aditivas y con
 
 | Archivo | Qué hace y relaciones | Mejora recomendada |
 |---|---|---|
-| `routes/api.php` | Define health, login/logout, flujo móvil de salida, responsable de predio y administración; asigna middleware y nombres de ruta. | Versionar API, documentar OpenAPI, agrupar por contexto/controlador y revisar consistencia de códigos HTTP/respuestas. |
-| `routes/web.php` | Define la ruta web `/` que muestra `welcome`. | Retirar imports no usados y agregar rutas web solo si existe interfaz servida por Laravel. |
-| `routes/console.php` | Lugar para comandos/tareas definidos con API de rutas de consola Laravel. | Documentar programación de tareas y mantener lógica en clases dedicadas. |
-| `routes/channels.php` | Define autorización de canales de broadcasting. | Si se usa Reverb, proteger cada canal por usuario/rol; eliminar canal por defecto no utilizado. |
+| `routes/api.php` | Define health, login/logout, flujo móvil de salida, responsable de predio y administración; asigna middleware (`active.session`, `device.bound`, `platform`, `role`, `premise.location`) y nombres de ruta. | Versionar API, documentar OpenAPI y revisar consistencia de códigos HTTP/respuestas. |
+| `routes/web.php` | Define la ruta web `/` que muestra `welcome`. | Agregar rutas web solo si existe interfaz servida por Laravel. |
 | `public/index.php` | Front controller HTTP: carga bootstrap y despacha la petición. | Conservar como archivo de framework; configuración del servidor debe apuntar a `public/`. |
 | `public/.htaccess` | Reglas Apache para reescritura hacia el front controller y protección de directorios. | Mantener sincronizado con configuración de producción; forzar HTTPS a nivel de proxy/servidor. |
 | `public/robots.txt` | Directivas de indexación para robots. | Confirmar que el entorno no expone contenido privado; no usarlo como control de acceso. |
@@ -191,7 +215,7 @@ Estos archivos versionados son marcadores Git; no contienen lógica de aplicaci�
 
 | Archivo | Qué explica y relaciones | Mejora recomendada |
 |---|---|---|
-| `docs/validacion-ubicacion.md` | Requisitos/criterios de validación de ubicación usados por `CheckPremiseLocation`. | Mantener umbrales sincronizados con configuración/código y documentar límites de confianza del GPS. |
+| `docs/validacion-ubicacion.md` | Requisitos/criterios de validación de ubicación usados por `EnsurePremiseLocation`. | Mantener umbrales sincronizados con configuración/código y documentar límites de confianza del GPS. |
 | `docs/frontend/responsable-predio.md` | Contrato o guía frontend para la experiencia del responsable de predio y su QR; relacionado con endpoints manager. | Añadir ejemplos de requests/responses, estados de error y versión del contrato. |
 | `docs/mapa-del-repositorio.md` | Este mapa: inventario versionado, relaciones y evolución arquitectónica recomendada. | Actualizar en cada cambio estructural importante; idealmente automatizar el inventario y revisar manualmente semántica. |
 
@@ -201,6 +225,10 @@ Estos archivos versionados son marcadores Git; no contienen lógica de aplicaci�
 |---|---|---|
 | `tests/TestCase.php` | Clase base para pruebas Laravel. | Añadir helpers comunes mínimos y configuración de entorno de prueba predecible. |
 | `tests/Concerns/SignsInWithDevice.php` | Trait para iniciar sesión de prueba incluyendo encabezado/plataforma/dispositivo. | Reutilizar fixtures coherentes y no ocultar preparación importante de escenarios. |
+| `tests/Feature/AdminCatalogTest.php` | Panel de administración: catálogo y motivos de predios, listado de predios y tiempo de vida del QR. | Añadir alta/edición de predios con responsable. |
+| `tests/Feature/LeaveFlowTest.php` | Flujo móvil completo con el sistema externo y Redis simulados: escaneo (salida/retorno), confirmación de salida, estado, sincronización de motivos y generación del QR. | Cubrir la concurrencia de dos escaneos simultáneos. |
+| `tests/Feature/LeaveLimitsTest.php` | Límite general de salidas por período y por predio. | Probar los límites de semana y mes. |
+| `tests/Feature/LeaveStatsTest.php` | Estadísticas de salidas y perfil (foto/cargo) con el servicio externo simulado. | — |
 | `tests/Feature/DeviceBindingTest.php` | Escenarios de vinculación y autorización por dispositivo. | Cubrir carreras, revocación, hash no expuesto y ambos clientes/roles. |
 | `tests/Feature/PremiseLocationTest.php` | Escenarios de ubicación/precisión/distancia y middleware. | Probar límites exactos, timestamps futuros/vencidos, predios sin coordenadas y varios predios. |
 | `tests/Feature/PremiseManagerTest.php` | Acceso y operaciones de responsable de predio. | Cubrir separación entre predios, plataforma incorrecta y cambios de asignación. |
@@ -214,21 +242,20 @@ User ── Role
   ├── Premise (asignación de responsable)
   ├── UserDevice (web/móvil)
   ├── UserActiveSession ── sessions (Laravel)
-  ├── UserLeavePolicy
   └── Record ── ReasonPremise ── Premise
-                           └──── ReasonLeave
+                           └──── LeaveReason
 
 API routes → middleware de autenticación/sesión/dispositivo/plataforma/rol/ubicación
-           → controllers → services / repositories → modelos Eloquent → base de datos
-                                         └────────→ servicio externo
+           → Form Request → controller → services → repositories → modelos Eloquent → base de datos
+                                            └─────→ ExternalApiService → sistema externo / Redis
 ```
 
 ## 12. Mejoras de arquitectura por prioridad
 
 1. **Contratos y documentación:** renovar `README.md`; publicar especificación OpenAPI con autenticación, headers requeridos (`ClientPlatform`, `DeviceId`), payloads y errores.
-2. **Bordes HTTP delgados:** crear Form Requests, API Resources y excepciones de dominio para sacar validación, formato de respuesta y reglas de los controladores.
-3. **Casos de uso explícitos:** encapsular iniciar sesión, registrar salida/retorno, sincronizar motivos, resetear dispositivo y administrar predios. Mantener transacciones alrededor de cambios que deben ser atómicos.
-4. **Integraciones resilientes:** cliente dedicado para servicio externo con configuración tipada, timeout, reintento acotado, idempotencia y observabilidad redactada; trabajos en cola cuando sea apropiado.
+2. ~~**Bordes HTTP delgados:** Form Requests, API Resources y excepciones de dominio.~~ Hecho (`app/Http/Requests`, `PremiseResource`, `ApiException`); falta Resource para el resto de respuestas y unificar los dos formatos de cuerpo (`status` numérico / textual).
+3. ~~**Casos de uso explícitos:** iniciar sesión, registrar salida/retorno, sincronizar motivos, administrar predios.~~ Hecho en `app/Services`. Falta envolver en transacción los cambios que deben ser atómicos.
+4. **Integraciones resilientes:** el cliente dedicado (`ExternalApiService`, configuración en `config/services.php`, tiempos de espera) ya existe; falta reintento acotado, idempotencia y observabilidad redactada; trabajos en cola cuando sea apropiado.
 5. **Integridad y concurrencia:** claves foráneas, índices compuestos, restricciones únicas/check y bloqueo/transacción donde dos solicitudes simultáneas puedan exceder cuotas o abrir salidas duplicadas.
 6. **Seguridad y privacidad:** políticas de autorización por recurso, rotación/revocación de dispositivo, gestión de secretos, límites de intentos, auditoría administrativa y retención mínima de IP/ubicación/User-Agent.
 7. **Consistencia de dominio:** normalizar códigos de rol/plataforma, zona horaria y estados de salida; tipar relaciones y resultados, y evitar métodos de repositorio ambiguos o duplicados.

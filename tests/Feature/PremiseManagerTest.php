@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Http\Middleware\CheckActiveSession;
+use App\Http\Middleware\EnsureActiveSession;
 use App\Models\Premise;
 use App\Models\Role;
 use App\Models\User;

@@ -15,7 +15,9 @@ use App\Models\Role;
 final class ClientPlatform
 {
     public const WEB = 'web';
+
     public const MOBILE = 'mobile';
+
     public const ALL = [self::WEB, self::MOBILE];
 
     /** Encabezado con el que cada aplicación se identifica al iniciar sesión. */
@@ -29,37 +31,26 @@ final class ClientPlatform
         self::MOBILE => [Role::ADMIN, Role::EMPLOYEE],
     ];
 
-    // Valida el valor recibido.
     public static function isValid(?string $platform): bool
     {
         return in_array($platform, self::ALL, true);
     }
 
-    // Verifica el acceso permitido.
+    /** El rol puede usar esa aplicación. */
     public static function allows(string $platform, ?string $roleName): bool
     {
         return in_array(strtoupper($roleName ?? ''), self::ALLOWED_ROLES[$platform] ?? [], true);
     }
 
-    /** Aplicaciones que puede usar un rol. */
-    public static function forRole(?string $roleName): array
-    {
-        return array_values(array_filter(self::ALL, fn ($p) => self::allows($p, $roleName)));
-    }
-
-    // Procesa la operación solicitada.
     public static function roleNotAllowedMessage(string $platform, ?string $roleName): string
     {
         return match (true) {
-            $platform === self::WEB && strtoupper($roleName ?? '') === Role::EMPLOYEE
-                => 'Los empleados solo pueden ingresar desde la aplicación móvil.',
-            $platform === self::MOBILE && strtoupper($roleName ?? '') === Role::MANAGE_PREMISE
-                => 'Las cuentas de responsable de predio solo pueden ingresar desde la versión web.',
+            $platform === self::WEB && strtoupper($roleName ?? '') === Role::EMPLOYEE => 'Los empleados solo pueden ingresar desde la aplicación móvil.',
+            $platform === self::MOBILE && strtoupper($roleName ?? '') === Role::MANAGE_PREMISE => 'Las cuentas de responsable de predio solo pueden ingresar desde la versión web.',
             default => 'Esta cuenta no tiene acceso desde esta aplicación.',
         };
     }
 
-    // Procesa la operación solicitada.
     public static function deviceNotAuthorizedMessage(string $platform): string
     {
         return $platform === self::WEB

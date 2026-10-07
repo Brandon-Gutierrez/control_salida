@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Http\Middleware\CheckActiveSession;
-use App\Http\Middleware\CheckPremiseLocation;
+use App\Http\Middleware\EnsureActiveSession;
+use App\Http\Middleware\EnsurePremiseLocation;
 use App\Models\Premise;
 use App\Models\Role;
 use App\Models\User;
@@ -48,7 +48,7 @@ class PremiseLocationTest extends TestCase
         $request = Request::create('/api/qr/scan', 'POST', $payload);
         $request->headers->set('Accept', 'application/json');
 
-        return app(CheckPremiseLocation::class)->handle($request, fn () => response()->json(['ok' => true]));
+        return app(EnsurePremiseLocation::class)->handle($request, fn () => response()->json(['ok' => true]));
     }
 
     /** 1 grado de latitud = 111.195 km. */
@@ -103,7 +103,7 @@ class PremiseLocationTest extends TestCase
             'latitude' => self::LAT, 'longitude' => self::LNG, 'accuracy_m' => 5,
             'location_timestamp' => now()->toIso8601String(),
         ]);
-        app(CheckPremiseLocation::class)->handle($request, fn () => response()->json([]));
+        app(EnsurePremiseLocation::class)->handle($request, fn () => response()->json([]));
     }
 
     // ---------------------------------------------------- gestión de predios

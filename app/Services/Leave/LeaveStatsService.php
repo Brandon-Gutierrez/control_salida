@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Leave;
 
 use App\Models\Record;
 use App\Models\User;
@@ -13,7 +13,7 @@ use Carbon\Carbon;
  */
 class LeaveStatsService
 {
-    // Obtiene los datos del usuario.
+    /** @return array<string, array{from: string, exits: int, minutes: int}> */
     public function forUser(User $user): array
     {
         $now = now();
@@ -29,15 +29,15 @@ class LeaveStatsService
 
         $stats = [];
         foreach ($periods as $name => $start) {
-            $inPeriod = $records->filter(fn ($r) => Carbon::parse($r->leave_time)->gte($start));
+            $inPeriod = $records->filter(fn ($record) => Carbon::parse($record->leave_time)->gte($start));
             $stats[$name] = [
                 'from' => $start->toDateString(),
                 'exits' => $inPeriod->count(),
                 // Una salida sin retorno cuenta hasta este momento.
-                'minutes' => (int) round($inPeriod->sum(function ($r) use ($now) {
-                    $end = $r->return_time ? Carbon::parse($r->return_time) : $now;
+                'minutes' => (int) round($inPeriod->sum(function ($record) use ($now) {
+                    $end = $record->return_time ? Carbon::parse($record->return_time) : $now;
 
-                    return max(0, Carbon::parse($r->leave_time)->diffInSeconds($end, false)) / 60;
+                    return max(0, Carbon::parse($record->leave_time)->diffInSeconds($end, false)) / 60;
                 })),
             ];
         }

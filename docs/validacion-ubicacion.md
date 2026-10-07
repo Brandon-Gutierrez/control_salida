@@ -1,7 +1,7 @@
 # Validación de ubicación en escaneos
 
 Los endpoints `POST /api/qr/scan` y `POST /api/leaves` (rol EMPLOYEE) pasan por el middleware
-`check.premise.location` (`app/Http/Middleware/CheckPremiseLocation.php`).
+`premise.location` (`app/Http/Middleware/EnsurePremiseLocation.php`).
 
 ## Campos obligatorios que envía la app móvil
 

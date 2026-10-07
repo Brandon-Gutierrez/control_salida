@@ -7,13 +7,12 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/** Restringe una ruta a las aplicaciones indicadas (p. ej. check.platform:web). */
-class CheckPlatform
+/** Restringe una ruta a las aplicaciones indicadas (p. ej. `platform:web`). */
+class EnsureClientPlatform
 {
-    // Procesa la solicitud.
     public function handle(Request $request, Closure $next, string ...$platforms): Response
     {
-        if (!in_array($request->session()->get(ClientPlatform::SESSION_KEY), $platforms, true)) {
+        if (! in_array($request->session()->get(ClientPlatform::SESSION_KEY), $platforms, true)) {
             return response()->json([
                 'status' => 'ERROR',
                 'code' => 'PLATFORM_NOT_ALLOWED',

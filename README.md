@@ -1,66 +1,74 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# API de control de salidas temporales
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Backend Laravel 12 para registrar las salidas temporales y retornos del personal mediante el QR de cada predio. Lo consumen:
 
-## About Laravel
+- `control_leaves_mobile`: app de los empleados (escaneo de QR, motivos, estado).
+- `control_leaves_web`: panel de administración y pantalla de QR de los responsables de predio.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Qué hace
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Inicia sesión con cookies (Sanctum stateful): las cuentas de empleados y administradores se validan contra el **sistema externo de personal**; los responsables de predio usan credenciales locales.
+- Cada cuenta queda vinculada a **un único dispositivo por aplicación** (`web` / `mobile`) y tiene una sola sesión activa por aplicación.
+- Valida que la persona esté a menos de **50 m** de un predio, con una ubicación reciente y sin GPS simulado ni VPN.
+- Genera QR temporales por predio (Redis) y un comprobante corto (`leaveTicket`) que une el escaneo con la confirmación del motivo.
+- Aplica un límite general de salidas por día, semana o mes.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Requisitos
 
-## Learning Laravel
+- PHP 8.2+, Composer, PostgreSQL y Redis.
+- Acceso al sistema externo de personal.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Instalación
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+# Configure la base de datos, Redis y las variables del sistema externo (ver abajo)
+php artisan migrate --seed
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### Variables del sistema externo
 
-## Laravel Sponsors
+Se leen desde `config/services.php` (`external_api`):
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+| Variable | Qué es |
+|---|---|
+| `KEY_SOFTWARE` | Clave enviada en la cabecera `keysoftware` |
+| `API_LOGIN` | Autenticación de credenciales |
+| `API_GETEMPLOYEE` | Datos del empleado (foto, cargo, área) |
+| `API_GETREASONS` | Catálogo de motivos de salida |
+| `API_GETCHECKOUT` | Salida registrada del día |
+| `API_REGISTERCHECKOUT` | Registro de salidas y retornos |
 
-### Premium Partners
+## Comandos
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+```bash
+php artisan test                     # Pruebas (SQLite en memoria, servicio externo y Redis simulados)
+php vendor/bin/pint                  # Formato de código
+php artisan devices:reset {usuario}  # Desvincula el dispositivo de una cuenta (--platform=web|mobile|all)
+```
 
-## Contributing
+## Estructura
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```text
+app/
+├── Console/Commands      devices:reset
+├── Exceptions            ApiException (errores esperados que se responden como JSON)
+├── Http/
+│   ├── Controllers       Delgados: validan con un Form Request y delegan en un servicio
+│   ├── Middleware        EnsureActiveSession, EnsureDeviceIsBound, EnsureClientPlatform,
+│   │                     EnsureUserHasRole, EnsurePremiseLocation
+│   ├── Requests          Un Form Request por endpoint
+│   └── Resources         PremiseResource
+├── Models                Eloquent
+├── Repositories          Consultas por entidad
+├── Services              Reglas y casos de uso (Auth, Account, Premise, External, Leave, Qr)
+└── Support               ClientPlatform, Geo
+```
 
-## Code of Conduct
+Más detalle en [docs/mapa-del-repositorio.md](docs/mapa-del-repositorio.md) y [docs/validacion-ubicacion.md](docs/validacion-ubicacion.md).
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## API
 
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Prefijo `/api`. Públicas: `GET /health` y `POST /auth/login`. Autenticadas (sesión + dispositivo): `/auth/*`, `/me/*`, `/qr/scan`, `/leaves`, `/premises/{nombre}/reasons` (app móvil), `/manager/qr-token` (responsable) y `/admin/*` (administración). Cada aplicación se identifica con las cabeceras `X-Client-Platform` y `DeviceId`.

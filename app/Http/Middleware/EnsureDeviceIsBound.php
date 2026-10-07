@@ -2,7 +2,7 @@
 
 namespace App\Http\Middleware;
 
-use App\Services\DeviceBindingService;
+use App\Services\Auth\DeviceBindingService;
 use App\Support\ClientPlatform;
 use Closure;
 use Illuminate\Http\Request;
@@ -13,21 +13,17 @@ use Symfony\Component\HttpFoundation\Response;
  * en la aplicación con la que inició sesión (web o mobile), y el rol debe
  * seguir teniendo acceso a esa aplicación.
  */
-class CheckDeviceId
+class EnsureDeviceIsBound
 {
-    // Inicializa sus dependencias.
-    public function __construct(private DeviceBindingService $devices)
-    {
-    }
+    public function __construct(private DeviceBindingService $devices) {}
 
-    // Procesa la solicitud.
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
         $platform = $request->session()->get(ClientPlatform::SESSION_KEY);
 
         // Sesiones creadas antes de identificar la aplicación.
-        if (!ClientPlatform::isValid($platform)) {
+        if (! ClientPlatform::isValid($platform)) {
             return response()->json([
                 'status' => 'ERROR',
                 'code' => 'SESSION_PLATFORM_MISSING',
@@ -35,7 +31,7 @@ class CheckDeviceId
             ], 401);
         }
 
-        if (!ClientPlatform::allows($platform, $user->role?->name)) {
+        if (! ClientPlatform::allows($platform, $user->role?->name)) {
             return response()->json([
                 'status' => 'ERROR',
                 'code' => 'PLATFORM_NOT_ALLOWED',
@@ -43,7 +39,7 @@ class CheckDeviceId
             ], 403);
         }
 
-        if (!$this->devices->matches($user, $platform, $request->header('DeviceId'))) {
+        if (! $this->devices->matches($user, $platform, $request->header('DeviceId'))) {
             return response()->json([
                 'status' => 'ERROR',
                 'code' => 'DEVICE_NOT_AUTHORIZED',

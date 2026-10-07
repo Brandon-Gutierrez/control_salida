@@ -36,4 +36,15 @@ return [
         ],
     ],
 
+    // Sistema externo de personal: autenticación, datos del empleado, catálogo
+    // de motivos y registro de salidas/retornos.
+    'external_api' => [
+        'key' => env('KEY_SOFTWARE'),
+        'login_url' => env('API_LOGIN'),
+        'employee_url' => env('API_GETEMPLOYEE'),
+        'reasons_url' => env('API_GETREASONS'),
+        'checkout_url' => env('API_GETCHECKOUT'),
+        'register_checkout_url' => env('API_REGISTERCHECKOUT'),
+    ],
+
 ];

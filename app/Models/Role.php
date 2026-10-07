@@ -3,26 +3,27 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-// Representa un rol.
 class Role extends Model
 {
     public const EMPLOYEE = 'EMPLOYEE';
+
     public const ADMIN = 'ADMIN';
+
     /** Responsable de un único predio: solo ve la pantalla de QR de su predio. */
     public const MANAGE_PREMISE = 'MANAGE_PREMISE';
 
-    protected $table = "roles";
+    protected $table = 'roles';
+
     protected $primaryKey = 'role_id';
+
     protected $fillable = [
-        "name",
+        'name',
     ];
-    // Procesa la operación solicitada.
-    public function users()
+
+    public function users(): HasMany
     {
-        return $this->HasMany(
-            User::class,
-            'role_id',
-            'role_id');
+        return $this->hasMany(User::class, 'role_id', 'role_id');
     }
 }

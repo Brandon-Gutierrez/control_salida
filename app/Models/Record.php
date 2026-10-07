@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 
-// Representa un registro de salida.
+/** Salida de una persona y, cuando vuelve, su retorno (`return_time` nulo = sigue fuera). */
 class Record extends Pivot
 {
     protected $table = 'records';
+
     protected $primaryKey = 'record_id';
+
     public $incrementing = true;
 
     public $timestamps = false;
@@ -20,13 +23,12 @@ class Record extends Pivot
         'reason_premise_id',
     ];
 
-    // Obtiene el usuario relacionado.
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
-    // Obtiene los motivos relacionados.
-    public function reasonPremise()
+
+    public function reasonPremise(): BelongsTo
     {
         return $this->belongsTo(ReasonPremise::class, 'reason_premise_id');
     }

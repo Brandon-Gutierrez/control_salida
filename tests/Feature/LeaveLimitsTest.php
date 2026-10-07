@@ -3,11 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\Premise;
-use App\Models\ReasonLeave;
+use App\Models\LeaveReason;
 use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\LeaveQuotaService;
+use App\Services\Leave\LeaveLimitService;
 use App\Support\ClientPlatform;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -34,7 +34,7 @@ class LeaveLimitsTest extends TestCase
         $this->employee = User::create(['external_identifier' => 'e', 'name' => 'Juan', 'item' => 2, 'role_id' => $emp->role_id]);
         $premise = Premise::create(['name' => 'Prado', 'latitude' => -17.39, 'longitude' => -66.15]);
         $this->premiseId = $premise->premise_id;
-        $reason = ReasonLeave::create(['name' => 'Trámite', 'code' => 'T']);
+        $reason = LeaveReason::create(['name' => 'Trámite', 'code' => 'T']);
         $this->reasonPremiseId = DB::table('reason_premise')->insertGetId([
             'reason_id' => $reason->reason_id, 'premise_id' => $premise->premise_id,
         ]);
@@ -54,17 +54,17 @@ class LeaveLimitsTest extends TestCase
             ->putJson('/api/admin/settings/leave-limits', ['period' => 'week', 'max_exits' => 5, 'max_exits_per_premise' => null])
             ->assertOk()->assertJsonPath('data.period', 'week')->assertJsonPath('data.max_exits', 5);
 
-        $this->assertSame(['period' => 'week', 'max_exits' => 5, 'max_exits_per_premise' => null], LeaveQuotaService::policy());
+        $this->assertSame(['period' => 'week', 'max_exits' => 5, 'max_exits_per_premise' => null], app(LeaveLimitService::class)->policy());
     }
 
     public function test_el_limite_aplica_a_todas_las_personas(): void
     {
-        LeaveQuotaService::savePolicy('day', 2, null);
+        app(LeaveLimitService::class)->savePolicy('day', 2, null);
         $other = User::create(['external_identifier' => 'o', 'name' => 'Otra', 'item' => 3, 'role_id' => $this->employee->role_id]);
         $this->leaveToday($this->employee, 2);
         $this->leaveToday($other, 1);
 
-        $service = app(LeaveQuotaService::class);
+        $service = app(LeaveLimitService::class);
         $this->assertSame('total', $service->check($this->employee, $this->premiseId)['limit_type']);
         $this->assertNull($service->check($other, $this->premiseId));
     }
@@ -73,15 +73,15 @@ class LeaveLimitsTest extends TestCase
     {
         $this->leaveToday($this->employee, 5);
 
-        $this->assertNull(app(LeaveQuotaService::class)->check($this->employee, $this->premiseId));
+        $this->assertNull(app(LeaveLimitService::class)->check($this->employee, $this->premiseId));
     }
 
     public function test_limite_por_predio(): void
     {
-        LeaveQuotaService::savePolicy('day', null, 1);
+        app(LeaveLimitService::class)->savePolicy('day', null, 1);
         $this->leaveToday($this->employee, 1);
 
-        $this->assertSame('premise', app(LeaveQuotaService::class)->check($this->employee, $this->premiseId)['limit_type']);
+        $this->assertSame('premise', app(LeaveLimitService::class)->check($this->employee, $this->premiseId)['limit_type']);
     }
 
     public function test_valida_los_datos_y_solo_el_admin_puede(): void

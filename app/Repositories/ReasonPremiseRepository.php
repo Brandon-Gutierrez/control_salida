@@ -1,40 +1,29 @@
-<?php 
+<?php
+
 namespace App\Repositories;
 
+use App\Models\LeaveReason;
 use App\Models\ReasonPremise;
-use App\Models\ReasonLeave;
+use Illuminate\Support\Collection;
 
-// Consulta motivos por predio.
 class ReasonPremiseRepository
 {
-    //Obtener las salidas de un predio
-    public function getReasonsOfPremise(?int $premiseId) 
+    /** Nombres de los motivos habilitados en el predio, ordenados alfabéticamente. */
+    public function reasonNamesForPremise(int $premiseId): Collection
     {
-        $leavesId = ReasonPremise::where('premise_id', $premiseId)
-            ->pluck('reason_id');
-        
-        $reasons = ReasonLeave::whereIn('reason_id', $leavesId)
+        $reasonIds = ReasonPremise::where('premise_id', $premiseId)->pluck('reason_id');
+
+        return LeaveReason::whereIn('reason_id', $reasonIds)
             ->orderBy('name')
             ->pluck('name');
-
-        return $reasons;
     }
 
-    //Obtener el id de una razón de salida
-    public function getReasonId(String $nameReason) : ?int
+    /** Identificador del motivo habilitado en el predio (fila de la tabla pivote). */
+    public function findId(int $premiseId, int $reasonId): ?int
     {
-        $reasonId = ReasonLeave::where('name', $nameReason)
-            ->value('reason_id');
-        return $reasonId;
-    }
-
-    //Encontrar el id de una salida de un predio
-    public function findAReasonPremise(int $premiseId, int $reasonId) : ?int
-    {
-        $reasonPremise = ReasonPremise::where([
+        return ReasonPremise::where([
             'premise_id' => $premiseId,
             'reason_id' => $reasonId,
-            ])->value('id');
-        return $reasonPremise;
+        ])->value('id');
     }
 }

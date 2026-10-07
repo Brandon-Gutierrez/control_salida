@@ -1,43 +1,55 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Leave;
 
+use App\Exceptions\ApiException;
 use App\Models\Record;
 use App\Models\Setting;
 use App\Models\User;
 use Carbon\Carbon;
 
 /** Límite de salidas general: se aplica igual a todas las personas. */
-class LeaveQuotaService
+class LeaveLimitService
 {
     public const PERIODS = ['day', 'week', 'month'];
 
+    private const PERIOD_KEY = 'leave_limit_period';
+
+    private const MAX_EXITS_KEY = 'leave_limit_max_exits';
+
+    private const MAX_PER_PREMISE_KEY = 'leave_limit_max_per_premise';
+
     /** @return array{period: string, max_exits: ?int, max_exits_per_premise: ?int} */
-    public static function policy(): array
+    public function policy(): array
     {
-        $period = Setting::get('leave_limit_period', 'day');
-        $int = fn (?string $v) => ($v === null || $v === '') ? null : (int) $v;
+        $period = Setting::get(self::PERIOD_KEY, 'day');
+        $toInt = fn (?string $value) => ($value === null || $value === '') ? null : (int) $value;
 
         return [
             'period' => in_array($period, self::PERIODS, true) ? $period : 'day',
-            'max_exits' => $int(Setting::get('leave_limit_max_exits')),
-            'max_exits_per_premise' => $int(Setting::get('leave_limit_max_per_premise')),
+            'max_exits' => $toInt(Setting::get(self::MAX_EXITS_KEY)),
+            'max_exits_per_premise' => $toInt(Setting::get(self::MAX_PER_PREMISE_KEY)),
         ];
     }
 
-    // Guarda la política de límites.
-    public static function savePolicy(string $period, ?int $maxExits, ?int $maxPerPremise): void
+    /** Guarda el límite; null en un tope significa "sin tope". */
+    public function savePolicy(string $period, ?int $maxExits, ?int $maxExitsPerPremise): void
     {
-        Setting::set('leave_limit_period', $period);
-        Setting::set('leave_limit_max_exits', $maxExits === null ? '' : (string) $maxExits);
-        Setting::set('leave_limit_max_per_premise', $maxPerPremise === null ? '' : (string) $maxPerPremise);
+        Setting::set(self::PERIOD_KEY, $period);
+        Setting::set(self::MAX_EXITS_KEY, $maxExits === null ? '' : (string) $maxExits);
+        Setting::set(self::MAX_PER_PREMISE_KEY, $maxExitsPerPremise === null ? '' : (string) $maxExitsPerPremise);
     }
 
-    /** Returns a limit error payload when the next exit is not allowed. */
+    /**
+     * Devuelve el límite alcanzado si la próxima salida no está permitida, o
+     * null si puede salir.
+     *
+     * @return array{limit_type: string, allowed: int, used: int, period: string}|null
+     */
     public function check(User $user, int $premiseId): ?array
     {
-        $policy = self::policy();
-        if (!$policy['max_exits'] && !$policy['max_exits_per_premise']) {
+        $policy = $this->policy();
+        if (! $policy['max_exits'] && ! $policy['max_exits_per_premise']) {
             return null;
         }
 
@@ -74,7 +86,16 @@ class LeaveQuotaService
         return null;
     }
 
-    // Prepara la respuesta de rechazo.
+    /** @throws ApiException si la persona ya alcanzó el límite de salidas. */
+    public function assertWithinLimit(User $user, int $premiseId): void
+    {
+        $limit = $this->check($user, $premiseId);
+
+        if ($limit) {
+            throw ApiException::withBody(403, $this->rejectionPayload($limit));
+        }
+    }
+
     public function rejectionPayload(array $limit): array
     {
         $limitLabel = $limit['limit_type'] === 'total'
@@ -92,7 +113,7 @@ class LeaveQuotaService
         ];
     }
 
-    // Calcula el periodo aplicable.
+    /** @return array{0: Carbon, 1: Carbon} Inicio y fin del período en curso. */
     private function periodBounds(string $period): array
     {
         $now = now();
