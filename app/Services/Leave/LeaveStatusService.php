@@ -75,6 +75,7 @@ class LeaveStatusService
             'job_title' => $profile['job_title'],
             'area' => $profile['area'],
             'stats' => $this->stats->forUser($user),
+            'unreturned_leaves' => $this->stats->unreturnedBeforeToday($user),
         ];
     }
 

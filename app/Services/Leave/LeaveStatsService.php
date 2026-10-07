@@ -25,7 +25,9 @@ class LeaveStatsService
 
         $records = Record::where('user_id', $user->user_id)
             ->where('leave_time', '>=', min($periods))
-            ->get(['leave_time', 'return_time']);
+            ->get(['leave_time', 'return_time'])
+            // Una salida anterior a hoy sin retorno no se cuenta: se avisa aparte.
+            ->reject(fn ($record) => $this->isUnreturnedBefore($record, $now->copy()->startOfDay()));
 
         $stats = [];
         foreach ($periods as $name => $start) {
@@ -43,5 +45,31 @@ class LeaveStatsService
         }
 
         return $stats;
+    }
+
+    /**
+     * Salidas del último mes, anteriores a hoy, que nunca marcaron retorno.
+     *
+     * @return array<int, array{date: string, reason: ?string}> La más reciente primero.
+     */
+    public function unreturnedBeforeToday(User $user): array
+    {
+        return Record::where('user_id', $user->user_id)
+            ->whereNull('return_time')
+            ->where('leave_time', '<', now()->startOfDay())
+            ->where('leave_time', '>=', now()->subMonth())
+            ->with('reasonPremise.reason')
+            ->orderByDesc('leave_time')
+            ->get()
+            ->map(fn ($record) => [
+                'date' => Carbon::parse($record->leave_time)->toIso8601String(),
+                'reason' => $record->reasonPremise?->reason?->name,
+            ])
+            ->all();
+    }
+
+    private function isUnreturnedBefore(Record $record, Carbon $startOfToday): bool
+    {
+        return $record->return_time === null && Carbon::parse($record->leave_time)->lt($startOfToday);
     }
 }
