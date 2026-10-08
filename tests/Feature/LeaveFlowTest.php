@@ -7,6 +7,7 @@ use App\Models\Premise;
 use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
+use App\Repositories\RecordRepository;
 use App\Services\Leave\LeaveLimitService;
 use App\Support\ClientPlatform;
 use GuzzleHttp\Promise\PromiseInterface;
@@ -518,6 +519,36 @@ class LeaveFlowTest extends TestCase
         ]);
         Http::assertSent(fn (HttpRequest $r) => str_starts_with($r->url(), env('API_REGISTERCHECKOUT'))
             && $r['in_item'] == 2 && $r['in_motivo'] === 'T');
+    }
+
+    public function test_el_retorno_cierra_solo_la_ultima_salida_abierta(): void
+    {
+        $old = $this->openLeave($this->premise);
+        $old->update(['leave_time' => now()->subDays(3)]);
+        $latest = $this->openLeave($this->premise);
+
+        $closed = app(RecordRepository::class)->registerReturn($this->employee->user_id);
+
+        $this->assertSame(1, $closed);
+        $this->assertNotNull($latest->fresh()->return_time);
+        $this->assertNull($old->fresh()->return_time);
+    }
+
+    public function test_los_ids_de_las_salidas_son_siempre_el_anterior_mas_uno(): void
+    {
+        $repository = app(RecordRepository::class);
+
+        $first = $repository->registerLeave($this->employee->user_id, $this->reasonPremiseId);
+        $second = $repository->registerLeave($this->employee->user_id, $this->reasonPremiseId);
+        // Un insert fallido (motivo inexistente) no debe consumir un número.
+        try {
+            $repository->registerLeave($this->employee->user_id, 999999);
+        } catch (\Throwable) {
+        }
+        $third = $repository->registerLeave($this->employee->user_id, $this->reasonPremiseId);
+
+        $this->assertSame($first->record_id + 1, $second->record_id);
+        $this->assertSame($second->record_id + 1, $third->record_id);
     }
 
     public function test_confirmar_sigue_adelante_si_no_puede_invalidar_el_comprobante(): void
