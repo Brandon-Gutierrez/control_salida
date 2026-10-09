@@ -68,6 +68,12 @@ class ExternalApiService
         ]);
     }
 
+    /** Nombre del predio en texto plano (mayúsculas, sin espacios sobrantes), como lo espera `in_predio`. */
+    public static function premiseLabel(string $premiseName): string
+    {
+        return mb_strtoupper(trim($premiseName));
+    }
+
     /** Registra una salida (`in_motivo`) o un retorno (`in_id_solicitud`). */
     public function registerCheckout(array $payload): Response
     {

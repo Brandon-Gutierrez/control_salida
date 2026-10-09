@@ -53,7 +53,7 @@ class LeaveRegistrationService
 
         $this->limits->assertWithinLimit($user, $premiseId);
 
-        $this->registerInExternalApi($user, $reasonName);
+        $this->registerInExternalApi($user, $reasonName, $premiseName);
 
         $this->records->registerLeave($user->user_id, $reasonPremiseId);
 
@@ -82,12 +82,13 @@ class LeaveRegistrationService
         return $reasonPremiseId;
     }
 
-    private function registerInExternalApi(User $user, string $reasonName): void
+    private function registerInExternalApi(User $user, string $reasonName, string $premiseName): void
     {
         try {
             $registered = $this->api->fast()->registerCheckout([
                 'in_item' => $user->item,
                 'in_motivo' => $this->reasons->findCodeByName($reasonName),
+                'in_predio' => ExternalApiService::premiseLabel($premiseName),
             ]);
         } catch (ConnectionException $exception) {
             Log::warning('Servicio externo no disponible al registrar salida.', [

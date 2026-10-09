@@ -2,20 +2,24 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 // Representa un motivo de salida.
 class ReasonLeave extends Model
 {
     use HasFactory;
+
     //
-    protected $table = "reasons";
+    protected $table = 'reasons';
+
     protected $primaryKey = 'reason_id';
+
     protected $fillable = [
         'name',
         'code',
     ];
+
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -26,7 +30,7 @@ class ReasonLeave extends Model
     public function premises()
     {
         return $this->belongsToMany(Premise::class, 'reason_premise', 'reason_id', 'premise_id')
-        ->using(ReasonPremise::class)
-        ->withTimestamps();
+            ->using(ReasonPremise::class)
+            ->withTimestamps();
     }
 }

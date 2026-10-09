@@ -18,6 +18,11 @@ class PremiseRepository
         $premise->update($attributes);
     }
 
+    public function findNameById(int $premiseId): ?string
+    {
+        return Premise::where('premise_id', $premiseId)->value('name');
+    }
+
     public function findIdByName(string $name): ?int
     {
         return Premise::where('name', $name)->value('premise_id');

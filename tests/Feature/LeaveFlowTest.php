@@ -317,7 +317,21 @@ class LeaveFlowTest extends TestCase
 
         $this->assertNotNull($record->fresh()->return_time);
         Http::assertSent(fn (HttpRequest $r) => str_starts_with($r->url(), env('API_REGISTERCHECKOUT'))
-            && $r['in_item'] == 2 && $r['in_id_solicitud'] == 77);
+            && $r['in_item'] == 2 && $r['in_id_solicitud'] == 77 && $r['in_predio'] === 'PRADO');
+    }
+
+    public function test_el_retorno_marca_solo_la_ultima_salida_y_ignora_las_anteriores(): void
+    {
+        $this->qrIsValidFor($this->premise);
+        $this->fakeExternal($this->onLeaveCheckout());
+        $old = $this->openLeave($this->premise);
+        $old->update(['leave_time' => now()->subDays(5)]);
+        $latest = $this->openLeave($this->premise);
+
+        $this->scan()->assertOk()->assertJsonPath('action', 'showHome');
+
+        $this->assertNotNull($latest->fresh()->return_time);
+        $this->assertNull($old->fresh()->return_time);
     }
 
     public function test_escaneo_de_retorno_en_otro_predio_se_rechaza(): void
@@ -518,7 +532,7 @@ class LeaveFlowTest extends TestCase
             'return_time' => null,
         ]);
         Http::assertSent(fn (HttpRequest $r) => str_starts_with($r->url(), env('API_REGISTERCHECKOUT'))
-            && $r['in_item'] == 2 && $r['in_motivo'] === 'T');
+            && $r['in_item'] == 2 && $r['in_motivo'] === 'T' && $r['in_predio'] === 'PRADO');
     }
 
     public function test_el_retorno_cierra_solo_la_ultima_salida_abierta(): void

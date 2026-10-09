@@ -4,6 +4,7 @@ namespace App\Services\Qr;
 
 use App\Exceptions\ApiException;
 use App\Models\User;
+use App\Repositories\PremiseRepository;
 use App\Repositories\RecordRepository;
 use App\Services\External\EmployeeIdentityService;
 use App\Services\External\ExternalApiService;
@@ -30,6 +31,7 @@ class QrScanService
         private ExternalApiService $api,
         private LeaveLimitService $limits,
         private RecordRepository $records,
+        private PremiseRepository $premises,
     ) {}
 
     /**
@@ -156,6 +158,7 @@ class QrScanService
             $registered = $this->api->fast()->registerCheckout([
                 'in_item' => $user->item,
                 'in_id_solicitud' => $checkoutData[0]['id_solicitud'],
+                'in_predio' => ExternalApiService::premiseLabel($this->premises->findNameById($premiseId) ?? ''),
             ]);
         } catch (ConnectionException $exception) {
             Log::warning('No se pudo confirmar el retorno en el servicio externo.', [
@@ -177,7 +180,12 @@ class QrScanService
 
         // Cierra el registro local (usado para mostrar el motivo de la
         // última salida en el resumen del usuario).
-        $this->records->registerReturn($user->user_id);
+        // Solo se cierra la última salida abierta; las anteriores sin retorno se ignoran.
+        if ($this->records->registerReturn($user->user_id) !== 1) {
+            Log::warning('El retorno se registró en el servicio externo pero no había una salida local abierta.', [
+                'user_id' => $user->user_id,
+            ]);
+        }
 
         return [
             'status' => 0,

@@ -15,7 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnsurePremiseLocation
 {
-    private const MAX_RADIUS_METERS = 50;
+    private const MAX_RADIUS_METERS = 70;
 
     private const MAX_AGE_SECONDS = 120;
 
