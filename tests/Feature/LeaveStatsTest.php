@@ -95,6 +95,31 @@ class LeaveStatsTest extends TestCase
         $this->assertSame(0, $data['month']['exits']);
     }
 
+    public function test_filtra_por_un_rango_de_fechas(): void
+    {
+        $this->travelTo(now()->setDate(2025, 10, 15)->setTime(14, 0));
+
+        $this->leave('2025-10-15 09:00:00', '2025-10-15 09:30:00'); // fuera del rango
+        $this->leave('2025-10-13 10:00:00', '2025-10-13 11:00:00'); // 60 min
+        $this->leave('2025-10-12 23:30:00', '2025-10-13 00:10:00'); // 40 min, sale el día 12
+        $this->leave('2025-10-12 08:00:00', '2025-10-12 08:20:00'); // 20 min
+
+        $range = $this->signIn($this->employee, ClientPlatform::MOBILE)
+            ->getJson('/api/me/leave-stats?from=2025-10-12&to=2025-10-13')
+            ->assertOk()->json('data.range');
+
+        $this->assertSame([3, 120], [$range['exits'], $range['minutes']]);
+        $this->assertSame(['2025-10-12', '2025-10-13'], [$range['from'], $range['to']]);
+    }
+
+    public function test_rechaza_un_rango_invalido(): void
+    {
+        $client = $this->signIn($this->employee, ClientPlatform::MOBILE);
+
+        $client->getJson('/api/me/leave-stats?from=2025-10-13&to=2025-10-12')->assertStatus(422);
+        $client->getJson('/api/me/leave-stats?from=2025-10-13')->assertStatus(422);
+    }
+
     public function test_la_web_no_usa_la_ruta_de_estadisticas_movil(): void
     {
         $this->signIn($this->employee, ClientPlatform::WEB)->getJson('/api/me/leave-stats')->assertStatus(403);

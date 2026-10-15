@@ -48,6 +48,36 @@ class LeaveStatsService
     }
 
     /**
+     * Salidas y minutos fuera entre dos fechas (ambas incluidas). Igual que en
+     * `forUser`, una salida anterior a hoy sin retorno no se cuenta.
+     *
+     * @return array{from: string, to: string, exits: int, minutes: int}
+     */
+    public function forRange(User $user, Carbon $from, Carbon $to): array
+    {
+        $now = now();
+        $start = $from->copy()->startOfDay();
+        $end = $to->copy()->endOfDay();
+
+        $records = Record::where('user_id', $user->user_id)
+            ->where('leave_time', '>=', $start)
+            ->where('leave_time', '<=', $end)
+            ->get(['leave_time', 'return_time'])
+            ->reject(fn ($record) => $this->isUnreturnedBefore($record, $now->copy()->startOfDay()));
+
+        return [
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'exits' => $records->count(),
+            'minutes' => (int) round($records->sum(function ($record) use ($now) {
+                $finish = $record->return_time ? Carbon::parse($record->return_time) : $now;
+
+                return max(0, Carbon::parse($record->leave_time)->diffInSeconds($finish, false)) / 60;
+            })),
+        ];
+    }
+
+    /**
      * Salidas del último mes, anteriores a hoy, que nunca marcaron retorno.
      *
      * @return array<int, array{date: string, reason: ?string}> La más reciente primero.

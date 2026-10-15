@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * La persona debe estar a menos de 50 m de algún predio, con una ubicación
+ * La persona debe estar a menos de 70 m de algún predio, con una ubicación
  * reciente y sin señales de falsificación (GPS simulado o VPN).
  */
 class EnsurePremiseLocation

@@ -15,7 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Tests\Concerns\SignsInWithDevice;
 use Tests\TestCase;
 
-/** Validación de ubicación (50 m) y gestión de predios con coordenadas y responsable. */
+/** Validación de ubicación (70 m) y gestión de predios con coordenadas y responsable. */
 class PremiseLocationTest extends TestCase
 {
     use RefreshDatabase;
@@ -57,19 +57,19 @@ class PremiseLocationTest extends TestCase
         return self::LAT + $m / 111_195;
     }
 
-    public function test_dentro_de_50_metros_se_acepta(): void
+    public function test_dentro_del_radio_se_acepta(): void
     {
         $this->assertSame(200, $this->runMiddleware(['latitude' => $this->metersNorth(25)])->getStatusCode());
     }
 
-    public function test_a_mas_de_50_metros_se_rechaza(): void
+    public function test_fuera_del_radio_se_rechaza(): void
     {
         $this->assertSame(403, $this->runMiddleware(['latitude' => $this->metersNorth(120)])->getStatusCode());
     }
 
     public function test_la_imprecision_reportada_cuenta_contra_el_radio(): void
     {
-        $this->assertSame(403, $this->runMiddleware(['latitude' => $this->metersNorth(45), 'accuracy_m' => 20])->getStatusCode());
+        $this->assertSame(403, $this->runMiddleware(['latitude' => $this->metersNorth(45), 'accuracy_m' => 30])->getStatusCode());
     }
 
     public function test_gps_falso_se_rechaza_aunque_este_en_el_predio(): void

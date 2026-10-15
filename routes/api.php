@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveLimitController;
+use App\Http\Controllers\LeaveReportController;
 use App\Http\Controllers\LeaveStatsController;
 use App\Http\Controllers\LeaveStatusController;
 use App\Http\Controllers\PremiseController;
@@ -77,6 +78,8 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
             Route::put('/users/{user}/premise', [UserController::class, 'assignPremise'])->name('users.premise.update');
             Route::post('/users/{user}/device/reset', [UserController::class, 'resetDevice'])->name('users.device.reset');
             Route::post('/users/premise-managers', [PremiseManagerController::class, 'store'])->name('users.premise-managers.store');
+
+            Route::get('/reports/leaves', LeaveReportController::class)->name('reports.leaves');
 
             Route::get('/settings/qr', [QrSettingsController::class, 'show'])->name('settings.qr.show');
             Route::put('/settings/qr', [QrSettingsController::class, 'update'])->name('settings.qr.update');
