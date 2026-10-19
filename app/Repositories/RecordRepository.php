@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\Record;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class RecordRepository
@@ -13,16 +14,16 @@ class RecordRepository
      * falla o se revierte; aquí el id se calcula dentro de una transacción con
      * la tabla bloqueada, así dos salidas simultáneas no obtienen el mismo número.
      */
-    public function registerLeave(int $userId, int $reasonPremiseId): Record
+    public function registerLeave(int $userId, int $reasonPremiseId, ?Carbon $leftAt = null): Record
     {
-        return DB::transaction(function () use ($userId, $reasonPremiseId) {
+        return DB::transaction(function () use ($userId, $reasonPremiseId, $leftAt) {
             $connection = DB::connection();
             if ($connection->getDriverName() === 'pgsql') {
                 $connection->statement('LOCK TABLE records IN EXCLUSIVE MODE');
             }
 
             $record = new Record([
-                'leave_time' => now(),
+                'leave_time' => $leftAt ?? now(),
                 'return_time' => null,
                 'user_id' => $userId,
                 'reason_premise_id' => $reasonPremiseId,
@@ -43,7 +44,7 @@ class RecordRepository
     }
 
     /** Cierra solo la salida abierta más reciente de la persona; devuelve cuántas cerró (0 o 1). */
-    public function registerReturn(int $userId): int
+    public function registerReturn(int $userId, ?Carbon $returnedAt = null): int
     {
         $record = Record::where('user_id', $userId)
             ->whereNull('return_time')
@@ -51,7 +52,7 @@ class RecordRepository
             ->orderByDesc('record_id')
             ->first();
 
-        return $record ? (int) $record->update(['return_time' => now()]) : 0;
+        return $record ? (int) $record->update(['return_time' => $returnedAt ?? now()]) : 0;
     }
 
     /** La salida abierta más reciente de la persona fue desde este predio. */

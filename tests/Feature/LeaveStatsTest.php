@@ -112,6 +112,30 @@ class LeaveStatsTest extends TestCase
         $this->assertSame(['2025-10-12', '2025-10-13'], [$range['from'], $range['to']]);
     }
 
+    public function test_las_advertencias_sin_retorno_respetan_el_rango_y_omiten_hoy(): void
+    {
+        $this->travelTo(now()->setDate(2025, 10, 15)->setTime(14, 0));
+
+        $this->leave('2025-10-14 09:00:00', null); // ayer, sin retorno
+        $this->leave('2025-10-08 09:00:00', null); // semana pasada, sin retorno
+        $this->leave('2025-10-15 09:00:00', null); // hoy: aún puede marcar retorno
+
+        $client = $this->signIn($this->employee, ClientPlatform::MOBILE);
+
+        $inRange = $client->getJson('/api/me/leave-stats?from=2025-10-07&to=2025-10-09')
+            ->assertOk()->json('data.range.unreturned_leaves');
+        $this->assertCount(1, $inRange);
+        $this->assertStringStartsWith('2025-10-08', $inRange[0]['date']);
+
+        $withToday = $client->getJson('/api/me/leave-stats?from=2025-10-14&to=2025-10-15')
+            ->json('data.range.unreturned_leaves');
+        $this->assertCount(1, $withToday); // solo ayer; hoy se omite
+
+        $none = $client->getJson('/api/me/leave-stats?from=2025-10-01&to=2025-10-05')
+            ->json('data.range.unreturned_leaves');
+        $this->assertSame([], $none);
+    }
+
     public function test_rechaza_un_rango_invalido(): void
     {
         $client = $this->signIn($this->employee, ClientPlatform::MOBILE);

@@ -2,6 +2,7 @@
 
 namespace App\Services\External;
 
+use Carbon\Carbon;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -16,6 +17,9 @@ use Illuminate\Support\Facades\Http;
  */
 class ExternalApiService
 {
+    /** Campos de la respuesta de registro que pueden traer la fecha y hora completas, por prioridad. */
+    private const TIMESTAMP_KEYS = ['fecha_registro', 'fecha_hora', 'fecha_retorno', 'fecha_salida', 'fechahora', 'datetime', 'created_at', 'date'];
+
     private const FAST_CONNECT_TIMEOUT_SECONDS = 3;
 
     private const FAST_TIMEOUT_SECONDS = 8;
@@ -72,6 +76,51 @@ class ExternalApiService
     public static function premiseLabel(string $premiseName): string
     {
         return mb_strtoupper(trim($premiseName));
+    }
+
+
+    /**
+     * Fecha y hora con que el sistema externo registró la salida o el retorno,
+     * tomada de su respuesta, para guardar la misma hora en la base local y no
+     * generar desfases entre ambas. Null si la respuesta no la trae.
+     */
+    public static function registeredAt(Response $response): ?Carbon
+    {
+        $body = $response->json();
+        if (! is_array($body)) {
+            return null;
+        }
+
+        $values = [];
+        array_walk_recursive($body, function ($value, $key) use (&$values) {
+            if (is_string($key) && is_scalar($value) && (string) $value !== '' && ! isset($values[strtolower($key)])) {
+                $values[strtolower($key)] = (string) $value;
+            }
+        });
+
+        foreach (self::TIMESTAMP_KEYS as $key) {
+            if (isset($values[$key]) && ($parsed = self::parseTimestamp($values[$key]))) {
+                return $parsed;
+            }
+        }
+
+        // Fecha y hora en campos separados.
+        $date = $values['fecha'] ?? null;
+        $time = $values['hora'] ?? null;
+        if ($date !== null && $time !== null) {
+            return self::parseTimestamp(trim($date.' '.$time));
+        }
+
+        return null;
+    }
+
+    private static function parseTimestamp(string $value): ?Carbon
+    {
+        try {
+            return Carbon::parse($value, config('app.timezone'))->setTimezone(config('app.timezone'));
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /** Registra una salida (`in_motivo`) o un retorno (`in_id_solicitud`). */

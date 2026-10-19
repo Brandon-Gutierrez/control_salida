@@ -535,6 +535,53 @@ class LeaveFlowTest extends TestCase
             && $r['in_item'] == 2 && $r['in_motivo'] === 'T' && $r['in_predio'] === 'PRADO');
     }
 
+    public function test_la_salida_se_guarda_con_la_hora_que_devolvio_el_servicio_externo(): void
+    {
+        $this->ticketIs($this->ticketFor($this->premise));
+        Redis::shouldReceive('del')->once()->with('leave-ticket:ticket-1');
+        $this->fakeExternal(['register' => fn () => Http::response([
+            'error' => 0,
+            'data' => [['id_solicitud' => 99, 'fecha_registro' => '2026-03-02 08:15:30']],
+        ])]);
+
+        $this->confirm()->assertOk();
+
+        $this->assertSame(
+            '2026-03-02 08:15:30',
+            Record::where('user_id', $this->employee->user_id)->firstOrFail()->leave_time,
+        );
+    }
+
+    public function test_el_retorno_se_guarda_con_la_hora_que_devolvio_el_servicio_externo(): void
+    {
+        $this->qrIsValidFor($this->premise);
+        $record = $this->openLeave($this->premise);
+        $this->fakeExternal($this->onLeaveCheckout() + ['register' => fn () => Http::response([
+            'error' => 0,
+            'fecha' => '2026-03-02',
+            'hora' => '09:45:10',
+        ])]);
+
+        $this->scan()->assertOk();
+
+        $this->assertSame('2026-03-02 09:45:10', $record->fresh()->return_time);
+    }
+
+    public function test_sin_fecha_en_la_respuesta_se_usa_la_hora_del_servidor(): void
+    {
+        $this->travelTo(now()->setDate(2026, 5, 4)->setTime(12, 0));
+        $this->ticketIs($this->ticketFor($this->premise));
+        Redis::shouldReceive('del')->once()->with('leave-ticket:ticket-1');
+        $this->fakeExternal(['register' => fn () => Http::response(['error' => 0])]);
+
+        $this->confirm()->assertOk();
+
+        $this->assertSame(
+            '2026-05-04 12:00:00',
+            Record::where('user_id', $this->employee->user_id)->firstOrFail()->leave_time,
+        );
+    }
+
     public function test_el_retorno_cierra_solo_la_ultima_salida_abierta(): void
     {
         $old = $this->openLeave($this->premise);

@@ -74,20 +74,26 @@ class LeaveStatsService
 
                 return max(0, Carbon::parse($record->leave_time)->diffInSeconds($finish, false)) / 60;
             })),
+            // Solo las del rango; las de hoy se omiten porque aún puede marcar retorno.
+            'unreturned_leaves' => $this->unreturnedBeforeToday($user, $start, $end),
         ];
     }
 
     /**
-     * Salidas del último mes, anteriores a hoy, que nunca marcaron retorno.
+     * Salidas anteriores a hoy que nunca marcaron retorno: las del último mes
+     * o, si se indica un rango, solo las que caen dentro de él.
      *
      * @return array<int, array{date: string, reason: ?string}> La más reciente primero.
      */
-    public function unreturnedBeforeToday(User $user): array
+    public function unreturnedBeforeToday(User $user, ?Carbon $from = null, ?Carbon $to = null): array
     {
+        $startOfToday = now()->startOfDay();
+
         return Record::where('user_id', $user->user_id)
             ->whereNull('return_time')
-            ->where('leave_time', '<', now()->startOfDay())
-            ->where('leave_time', '>=', now()->subMonth())
+            ->where('leave_time', '<', $startOfToday)
+            ->where('leave_time', '>=', $from ?? now()->subMonth())
+            ->when($to, fn ($query) => $query->where('leave_time', '<=', $to))
             ->with('reasonPremise.reason')
             ->orderByDesc('leave_time')
             ->get()

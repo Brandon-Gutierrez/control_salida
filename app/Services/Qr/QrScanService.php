@@ -181,7 +181,15 @@ class QrScanService
         // Cierra el registro local (usado para mostrar el motivo de la
         // última salida en el resumen del usuario).
         // Solo se cierra la última salida abierta; las anteriores sin retorno se ignoran.
-        if ($this->records->registerReturn($user->user_id) !== 1) {
+        // La hora de retorno es la que registró el sistema externo, no la del servidor.
+        $returnedAt = ExternalApiService::registeredAt($registered);
+        if ($returnedAt === null) {
+            Log::warning('El servicio externo no devolvió la fecha del retorno; se usa la hora del servidor.', [
+                'user_id' => $user->user_id,
+            ]);
+        }
+
+        if ($this->records->registerReturn($user->user_id, $returnedAt) !== 1) {
             Log::warning('El retorno se registró en el servicio externo pero no había una salida local abierta.', [
                 'user_id' => $user->user_id,
             ]);

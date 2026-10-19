@@ -11,6 +11,7 @@ use App\Repositories\RecordRepository;
 use App\Services\External\EmployeeIdentityService;
 use App\Services\External\ExternalApiService;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
 
 /** Confirma la salida de una persona que ya escaneó el QR de un predio y eligió su motivo. */
@@ -53,9 +54,18 @@ class LeaveRegistrationService
 
         $this->limits->assertWithinLimit($user, $premiseId);
 
-        $this->registerInExternalApi($user, $reasonName, $premiseName);
+        $registered = $this->registerInExternalApi($user, $reasonName, $premiseName);
 
-        $this->records->registerLeave($user->user_id, $reasonPremiseId);
+        // La hora de salida es la que registró el sistema externo, no la del
+        // servidor, para que ambas bases coincidan.
+        $leftAt = ExternalApiService::registeredAt($registered);
+        if ($leftAt === null) {
+            Log::warning('El servicio externo no devolvió la fecha de la salida; se usa la hora del servidor.', [
+                'user_id' => $user->user_id,
+            ]);
+        }
+
+        $this->records->registerLeave($user->user_id, $reasonPremiseId, $leftAt);
 
         $this->tickets->discard($user, $leaveTicket);
     }
@@ -82,7 +92,7 @@ class LeaveRegistrationService
         return $reasonPremiseId;
     }
 
-    private function registerInExternalApi(User $user, string $reasonName, string $premiseName): void
+    private function registerInExternalApi(User $user, string $reasonName, string $premiseName): Response
     {
         try {
             $registered = $this->api->fast()->registerCheckout([
@@ -107,5 +117,7 @@ class LeaveRegistrationService
 
             throw ApiException::fromFailedResponse($registered, 'LEAVE_REGISTRATION_FAILED');
         }
+
+        return $registered;
     }
 }
