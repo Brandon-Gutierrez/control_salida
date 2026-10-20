@@ -50,6 +50,15 @@ class ExternalApiService
         ]);
     }
 
+    /** Valida a una persona por su item y carnet (ingreso manual en el predio). */
+    public function loginWithCarnet(string $item, string $carnet): Response
+    {
+        return $this->request()->post(config('services.external_api.login_carnet_url'), [
+            'in_item' => $item,
+            'in_documento' => $carnet,
+        ]);
+    }
+
     public function employee(int|string $item): Response
     {
         return $this->request()->get(config('services.external_api.employee_url'), ['item' => $item]);
@@ -77,7 +86,6 @@ class ExternalApiService
     {
         return mb_strtoupper(trim($premiseName));
     }
-
 
     /**
      * Fecha y hora con que el sistema externo registró la salida o el retorno,

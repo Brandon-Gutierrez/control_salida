@@ -25,4 +25,28 @@ class ExternalAuthService
             'item' => $response->json('item'),
         ];
     }
+
+    /**
+     * Valida a una persona por item y número de documento (carnet) con el
+     * servicio `validaId`. Responde `{error: 0, data: {item, documento, nombre}}`
+     * si coinciden o `{error: 1, message}` si no.
+     *
+     * @return array{external_identifier: null, name: mixed, item: mixed}|null
+     *                                                                         null si item y documento no coinciden o el servicio rechaza la petición.
+     */
+    public function authenticateByCarnet(string $item, string $carnet): ?array
+    {
+        $response = $this->api->fast()->loginWithCarnet($item, $carnet);
+
+        if ($response->failed() || (int) $response->json('error') !== 0 || ! is_array($response->json('data'))) {
+            return null;
+        }
+
+        return [
+            // Este servicio no entrega un token; la persona se identifica por su item.
+            'external_identifier' => null,
+            'name' => $response->json('data.nombre'),
+            'item' => $response->json('data.item') ?? $item,
+        ];
+    }
 }

@@ -2,9 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Premise;
 use App\Models\LeaveReason;
-use App\Models\ReasonPremise;
+use App\Models\Premise;
 use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
@@ -23,6 +22,7 @@ class LeaveStatsTest extends TestCase
     use SignsInWithDevice;
 
     private User $employee;
+
     private int $reasonPremiseId;
 
     protected function setUp(): void
@@ -172,6 +172,7 @@ class LeaveStatsTest extends TestCase
             ->assertJsonPath('user.photo_url', null)
             ->assertJsonPath('user.job_title', null);
     }
+
     public function test_solo_se_aceptan_fotos_con_url_web(): void
     {
         Http::fake(['*' => Http::response(['status' => 0, 'photo' => 'javascript:alert(1)', 'rolName' => 'X'])]);

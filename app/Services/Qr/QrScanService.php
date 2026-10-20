@@ -46,8 +46,19 @@ class QrScanService
             throw ApiException::failure(422, 'No se recibió contenido del código QR.', 'QR_EMPTY', false);
         }
 
-        $premiseId = $this->premiseIdOf($user, $qrData);
+        return $this->scanAtPremise($user, $this->premiseIdOf($user, $qrData));
+    }
 
+    /**
+     * Lo que ocurre cuando una persona se presenta en un predio, sea por QR o
+     * por ingreso manual: salida (comprobante para elegir motivo) o retorno.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws ApiException
+     */
+    public function scanAtPremise(User $user, int $premiseId): array
+    {
         $this->employees->assertIdentified($user, self::CONTEXT);
 
         $checkout = $this->fetchCheckout($user);

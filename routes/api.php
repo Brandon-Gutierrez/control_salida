@@ -5,6 +5,7 @@ use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveLimitController;
 use App\Http\Controllers\LeaveStatsController;
 use App\Http\Controllers\LeaveStatusController;
+use App\Http\Controllers\ManualEntryController;
 use App\Http\Controllers\PremiseController;
 use App\Http\Controllers\PremiseManagerController;
 use App\Http\Controllers\PremiseReasonController;
@@ -55,6 +56,12 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
         ->middleware(['platform:web', 'role:'.Role::MANAGE_PREMISE])
         ->group(function () {
             Route::post('/qr-token', [QrController::class, 'storeForManager'])->name('qr-token.store');
+
+            // Ingreso manual (item + carnet); límite de intentos contra adivinación de carnets.
+            Route::post('/manual-entry/validate', [ManualEntryController::class, 'validateEntry'])
+                ->middleware('throttle:10,1')->name('manual-entry.validate');
+            Route::post('/manual-entry/confirm', [ManualEntryController::class, 'confirm'])
+                ->middleware('throttle:20,1')->name('manual-entry.confirm');
         });
 
     // Administrador (app web)
@@ -77,7 +84,6 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
             Route::put('/users/{user}/premise', [UserController::class, 'assignPremise'])->name('users.premise.update');
             Route::post('/users/{user}/device/reset', [UserController::class, 'resetDevice'])->name('users.device.reset');
             Route::post('/users/premise-managers', [PremiseManagerController::class, 'store'])->name('users.premise-managers.store');
-
 
             Route::get('/settings/qr', [QrSettingsController::class, 'show'])->name('settings.qr.show');
             Route::put('/settings/qr', [QrSettingsController::class, 'update'])->name('settings.qr.update');

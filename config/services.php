@@ -41,6 +41,7 @@ return [
     'external_api' => [
         'key' => env('KEY_SOFTWARE'),
         'login_url' => env('API_LOGIN'),
+        'login_carnet_url' => env('API_LOGINWITHCARNET'),
         'employee_url' => env('API_GETEMPLOYEE'),
         'reasons_url' => env('API_GETREASONS'),
         'checkout_url' => env('API_GETCHECKOUT'),

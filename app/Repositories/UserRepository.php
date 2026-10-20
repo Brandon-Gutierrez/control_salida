@@ -22,6 +22,15 @@ class UserRepository
             return $user;
         }
 
+        // Una persona creada antes por ingreso manual (sin token) ya tiene su
+        // item: se completa su cuenta en vez de crear otra con el mismo item.
+        $byItem = User::firstWhere('item', $item);
+        if ($byItem) {
+            $byItem->update(['external_identifier' => $externalIdentifier, 'name' => $name]);
+
+            return $byItem;
+        }
+
         // Si la base se creó sin sembrar los roles, el primer usuario nuevo
         // fallaba por la llave foránea: se garantiza que EMPLOYEE exista.
         $role = Role::firstOrCreate(['name' => Role::EMPLOYEE]);
@@ -57,6 +66,11 @@ class UserRepository
                 ? $query->where('user_id', (int) $key)->orWhere('item', (int) $key)
                 : $query->whereRaw('1 = 0'))
             ->first();
+    }
+
+    public function findByItem(int $item): ?User
+    {
+        return User::where('item', $item)->first();
     }
 
     public function itemExists(int $item): bool
