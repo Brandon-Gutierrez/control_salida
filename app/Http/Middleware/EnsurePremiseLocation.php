@@ -82,7 +82,7 @@ class EnsurePremiseLocation
             'status' => 1,
             'message' => $premises->isEmpty()
                 ? 'No hay predios con ubicación configurada. Contacte a administración.'
-                : 'Debe encontrarse dentro de '.self::MAX_RADIUS_METERS.' metros de un predio para realizar esta acción.',
+                : 'Debe encontrarse dentro de un predio para realizar esta acción.',
         ], 403);
     }
 }
