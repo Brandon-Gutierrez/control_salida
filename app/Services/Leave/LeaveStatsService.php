@@ -80,8 +80,8 @@ class LeaveStatsService
     }
 
     /**
-     * Salidas anteriores a hoy que nunca marcaron retorno: las del último mes
-     * o, si se indica un rango, solo las que caen dentro de él.
+     * Salidas anteriores a hoy que nunca marcaron retorno dentro del rango
+     * indicado (sin rango, las del último mes). La vista de hoy no las pide.
      *
      * @return array<int, array{date: string, reason: ?string}> La más reciente primero.
      */
