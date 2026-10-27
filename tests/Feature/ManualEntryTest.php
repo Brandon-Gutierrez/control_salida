@@ -8,6 +8,7 @@ use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
 use App\Repositories\UserRepository;
+use App\Services\Leave\LeaveLimitService;
 use App\Support\ClientPlatform;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
@@ -116,6 +117,27 @@ class ManualEntryTest extends TestCase
             && $r['in_item'] === '2057' && $r['in_documento'] === '1234567');
         // La persona se crea localmente con lo que devolvió el sistema externo.
         $this->assertDatabaseHas('users', ['item' => 2057, 'name' => 'Juan Pérez', 'external_identifier' => 'manual-2057']);
+    }
+
+    public function test_marca_los_motivos_que_la_persona_ya_agoto(): void
+    {
+        Redis::shouldReceive('setex')->once();
+        Redis::shouldReceive('ttl')->andReturn(40);
+
+        $person = User::create([
+            'external_identifier' => 'p', 'name' => 'Juan Pérez', 'item' => 2057,
+            'role_id' => Role::where('name', Role::EMPLOYEE)->value('role_id'),
+        ]);
+        Record::create([
+            'user_id' => $person->user_id, 'reason_premise_id' => $this->reasonPremiseId,
+            'leave_time' => now()->startOfDay()->addHour(), 'return_time' => now()->startOfDay()->addHours(2),
+        ]);
+        app(LeaveLimitService::class)->savePolicy('day', null, 'day', 'general', 1);
+
+        $this->validateEntry()->assertOk()
+            ->assertJsonPath('reasons', ['Trámite'])
+            ->assertJsonPath('blocked_reasons.0.name', 'Trámite')
+            ->assertJsonPath('blocked_reasons.0.limit', 1);
     }
 
     public function test_item_o_carnet_incorrectos_se_rechazan(): void

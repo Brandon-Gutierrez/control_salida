@@ -288,7 +288,7 @@ class LeaveFlowTest extends TestCase
     public function test_escaneo_rechazado_por_limite_de_salidas(): void
     {
         $this->qrIsValidFor($this->premise);
-        app(LeaveLimitService::class)->savePolicy('day', 1, null);
+        app(LeaveLimitService::class)->savePolicy('day', 1);
         Record::create([
             'user_id' => $this->employee->user_id, 'reason_premise_id' => $this->reasonPremiseId,
             'leave_time' => now()->startOfDay()->addMinute(), 'return_time' => now()->startOfDay()->addMinutes(5),
@@ -491,14 +491,27 @@ class LeaveFlowTest extends TestCase
     public function test_confirmar_rechazado_por_limite_de_salidas(): void
     {
         $this->ticketIs($this->ticketFor($this->premise));
-        app(LeaveLimitService::class)->savePolicy('day', null, 1);
+        app(LeaveLimitService::class)->savePolicy('day', 1);
         Record::create([
             'user_id' => $this->employee->user_id, 'reason_premise_id' => $this->reasonPremiseId,
             'leave_time' => now()->startOfDay()->addMinute(), 'return_time' => now()->startOfDay()->addMinutes(5),
         ]);
 
         $this->confirm()->assertStatus(403)->assertJsonPath('code', 'LEAVE_LIMIT_REACHED')
-            ->assertJsonPath('limit_type', 'premise');
+            ->assertJsonPath('limit_type', 'total');
+    }
+
+    public function test_un_motivo_agotado_no_impide_registrar_la_salida(): void
+    {
+        $this->ticketIs($this->ticketFor($this->premise));
+        app(LeaveLimitService::class)->savePolicy('day', null, 'day', 'general', 1);
+        Record::create([
+            'user_id' => $this->employee->user_id, 'reason_premise_id' => $this->reasonPremiseId,
+            'leave_time' => now()->startOfDay()->addMinute(), 'return_time' => now()->startOfDay()->addMinutes(5),
+        ]);
+
+        // El límite por motivo solo marca el motivo como no permitido: el servidor no rechaza.
+        $this->confirm()->assertOk()->assertJsonPath('status', 0);
     }
 
     public function test_confirmar_con_registro_externo_inalcanzable_o_rechazado(): void
@@ -627,7 +640,25 @@ class LeaveFlowTest extends TestCase
     {
         $this->signIn($this->employee, ClientPlatform::MOBILE)
             ->getJson('/api/premises/Prado/reasons')
-            ->assertOk()->assertExactJson(['reasons' => ['Trámite']]);
+            ->assertOk()->assertExactJson(['reasons' => ['Trámite'], 'blocked_reasons' => []]);
+    }
+
+    public function test_los_motivos_del_predio_marcan_los_que_llegaron_a_su_limite(): void
+    {
+        app(LeaveLimitService::class)->savePolicy('day', null, 'day', 'general', 1);
+        Record::create([
+            'user_id' => $this->employee->user_id, 'reason_premise_id' => $this->reasonPremiseId,
+            'leave_time' => now()->startOfDay()->addMinute(), 'return_time' => now()->startOfDay()->addMinutes(5),
+        ]);
+
+        $this->signIn($this->employee, ClientPlatform::MOBILE)
+            ->getJson('/api/premises/Prado/reasons')
+            ->assertOk()
+            ->assertJsonPath('reasons', ['Trámite'])
+            ->assertJsonPath('blocked_reasons.0.name', 'Trámite')
+            ->assertJsonPath('blocked_reasons.0.limit', 1)
+            ->assertJsonPath('blocked_reasons.0.used', 1)
+            ->assertJsonPath('blocked_reasons.0.period', 'day');
     }
 
     public function test_estado_de_salida_sin_salida_activa(): void

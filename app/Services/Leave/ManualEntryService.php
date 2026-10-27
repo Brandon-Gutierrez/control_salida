@@ -28,6 +28,7 @@ class ManualEntryService
         private ReasonPremiseRepository $reasons,
         private QrScanService $scan,
         private LeaveRegistrationService $leaves,
+        private LeaveLimitService $limits,
     ) {}
 
     /**
@@ -70,7 +71,9 @@ class ManualEntryService
         $step['item'] = (string) $person->item;
         if (($step['action'] ?? null) === 'showReasons') {
             $step['premise'] = $this->premises->findNameById($premiseId);
-            $step['reasons'] = $this->reasons->reasonNamesForPremise($premiseId)->values()->all();
+            $reasons = $this->reasons->reasonNamesForPremise($premiseId)->values();
+            $step['reasons'] = $reasons->all();
+            $step['blocked_reasons'] = $this->limits->blockedReasons($person, $reasons);
         }
 
         return $step;

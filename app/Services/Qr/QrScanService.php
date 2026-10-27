@@ -130,7 +130,7 @@ class QrScanService
 
     private function startLeave(User $user, int $premiseId): array
     {
-        $this->limits->assertWithinLimit($user, $premiseId);
+        $this->limits->assertWithinLimit($user);
 
         $ticket = $this->tickets->issue($user, $premiseId);
 

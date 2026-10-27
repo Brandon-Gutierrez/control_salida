@@ -15,12 +15,23 @@ class LeaveLimitController extends Controller
         return response()->json(['status' => 0, 'data' => $this->limits->policy()]);
     }
 
-    /** Un solo límite de salidas para todas las personas. Vacío = sin tope. */
+    /**
+     * Límite por persona y límite por motivo (general o personalizado),
+     * iguales para todas las personas. Vacío = sin tope.
+     */
     public function update(UpdateLeaveLimitsRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $reasonLimit = $data['reason_limit'];
 
-        $this->limits->savePolicy($data['period'], $data['max_exits'], $data['max_exits_per_premise']);
+        $this->limits->savePolicy(
+            $data['period'],
+            $data['max_exits'],
+            $reasonLimit['period'],
+            $reasonLimit['mode'],
+            $reasonLimit['general'],
+            collect($reasonLimit['custom'] ?? [])->mapWithKeys(fn ($row) => [(int) $row['reason_id'] => $row['max']])->all(),
+        );
 
         return response()->json(['status' => 0, 'data' => $this->limits->policy()]);
     }

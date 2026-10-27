@@ -52,7 +52,7 @@ class LeaveRegistrationService
 
         $reasonPremiseId = $this->findReasonPremiseId($premiseId, $premiseName, $reasonName);
 
-        $this->limits->assertWithinLimit($user, $premiseId);
+        $this->limits->assertWithinLimit($user);
 
         $registered = $this->registerInExternalApi($user, $reasonName, $premiseName);
 
