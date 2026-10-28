@@ -70,6 +70,16 @@ class AuthService
             );
         }
 
+        // Un teléfono no se comparte: si ya pertenece a otra cuenta, esta no
+        // puede vincularlo (aunque la otra haya cerrado sesión).
+        if ($this->devices->isPhoneOfAnotherAccount($user, $platform, $deviceId)) {
+            throw ApiException::authFailure(
+                403,
+                ClientPlatform::deviceTakenMessage(),
+                'DEVICE_LINKED_TO_ANOTHER_ACCOUNT',
+            );
+        }
+
         // Un único dispositivo por cuenta y aplicación: el primero que inicia
         // sesión queda vinculado; para cambiarlo, administración / TI debe
         // desvincular el anterior.

@@ -51,6 +51,12 @@ final class ClientPlatform
         };
     }
 
+    /** El teléfono ya pertenece a otra cuenta. */
+    public static function deviceTakenMessage(): string
+    {
+        return 'Este teléfono ya está vinculado a otra cuenta. Use el teléfono asignado a su cuenta o contacte a Recursos Humanos.';
+    }
+
     public static function deviceNotAuthorizedMessage(string $platform): string
     {
         return $platform === self::WEB

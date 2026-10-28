@@ -185,6 +185,82 @@ class DeviceBindingTest extends TestCase
             ->assertJsonPath('message', fn ($m) => str_contains($m, 'Recursos Humanos'));
     }
 
+    public function test_un_telefono_no_se_puede_vincular_a_dos_cuentas(): void
+    {
+        $this->externalUser('juan', $this->employeeRole);
+        $this->externalUser('maria', $this->employeeRole);
+        $this->doLogin('juan', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertOk();
+
+        // Juan sigue vinculado aunque cierre sesión; María no puede usar su teléfono.
+        $this->doLogin('maria', 'ok', ClientPlatform::MOBILE, self::PHONE)
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'DEVICE_LINKED_TO_ANOTHER_ACCOUNT')
+            ->assertJsonPath('message', fn ($m) => str_contains($m, 'otra cuenta'));
+
+        $this->assertDatabaseCount('user_devices', 1);
+        $this->assertDatabaseCount('user_active_sessions', 1);
+        $mariaId = User::where('item', crc32('maria') % 1_000_000)->value('user_id');
+        $this->assertDatabaseMissing('user_devices', ['user_id' => $mariaId]);
+    }
+
+    public function test_el_dueno_del_telefono_puede_volver_a_entrar(): void
+    {
+        $this->externalUser('juan', $this->employeeRole);
+        $this->externalUser('maria', $this->employeeRole);
+        $this->doLogin('juan', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertOk();
+        $this->doLogin('maria', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertStatus(403);
+
+        $this->doLogin('juan', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertOk();
+    }
+
+    public function test_al_desvincular_el_telefono_otra_cuenta_puede_usarlo(): void
+    {
+        $juan = $this->externalUser('juan', $this->employeeRole);
+        $this->externalUser('maria', $this->employeeRole);
+        $this->doLogin('juan', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertOk();
+        UserDevice::where('user_id', $juan->user_id)->delete();
+
+        $this->doLogin('maria', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertOk();
+    }
+
+    public function test_una_cuenta_con_telefono_propio_distinto_no_cambia_de_error(): void
+    {
+        $this->externalUser('juan', $this->employeeRole);
+        $this->externalUser('maria', $this->employeeRole);
+        $this->doLogin('juan', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertOk();
+        $this->doLogin('maria', 'ok', ClientPlatform::MOBILE, self::OTHER_PHONE)->assertOk();
+
+        // María ya tiene su teléfono: intentar el de Juan es el error de siempre.
+        $this->doLogin('maria', 'ok', ClientPlatform::MOBILE, self::PHONE)
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'DEVICE_NOT_AUTHORIZED');
+    }
+
+    public function test_un_admin_puede_usar_un_mismo_equipo_web_que_otra_cuenta(): void
+    {
+        $this->externalUser('ana', $this->adminRole);
+        $this->manager();
+        $this->doLogin('portero', 'clave-segura-123', ClientPlatform::WEB, self::LAPTOP)->assertOk();
+
+        // La regla de un solo dueño es solo para teléfonos.
+        $this->doLogin('ana', 'ok', ClientPlatform::WEB, self::LAPTOP)->assertOk();
+    }
+
+    public function test_las_vinculaciones_duplicadas_que_ya_existen_siguen_entrando(): void
+    {
+        $juan = $this->externalUser('juan', $this->employeeRole);
+        $maria = $this->externalUser('maria', $this->employeeRole);
+        foreach ([$juan, $maria] as $user) {
+            UserDevice::create([
+                'user_id' => $user->user_id, 'platform' => 'mobile',
+                'device_hash' => hash('sha256', self::PHONE), 'bound_at' => now(),
+            ]);
+        }
+
+        $this->doLogin('juan', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertOk();
+        $this->doLogin('maria', 'ok', ClientPlatform::MOBILE, self::PHONE)->assertOk();
+    }
+
     public function test_gestor_no_puede_entrar_a_la_app_movil(): void
     {
         $this->manager();

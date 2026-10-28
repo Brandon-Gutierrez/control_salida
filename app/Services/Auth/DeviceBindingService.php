@@ -5,6 +5,7 @@ namespace App\Services\Auth;
 use App\Models\User;
 use App\Models\UserDevice;
 use App\Repositories\UserActiveSessionRepository;
+use App\Support\ClientPlatform;
 
 /** Vincula cada cuenta a un único dispositivo por aplicación (web / mobile). */
 class DeviceBindingService
@@ -20,6 +21,31 @@ class DeviceBindingService
         return is_string($deviceId)
             && strlen($deviceId) >= self::MIN_ID_LENGTH
             && strlen($deviceId) <= self::MAX_ID_LENGTH;
+    }
+
+    /**
+     * Un teléfono solo puede estar vinculado a una cuenta: si esta cuenta aún
+     * no tiene teléfono y el que usa ya es de otra, no se le deja vincularlo.
+     * (La web no tiene esta regla: un mismo equipo puede servir a varias cuentas.)
+     * Las vinculaciones que ya existen no se revisan.
+     */
+    public function isPhoneOfAnotherAccount(User $user, string $platform, string $deviceId): bool
+    {
+        if ($platform !== ClientPlatform::MOBILE) {
+            return false;
+        }
+
+        $alreadyLinked = UserDevice::where('user_id', $user->user_id)
+            ->where('platform', $platform)
+            ->exists();
+        if ($alreadyLinked) {
+            return false;
+        }
+
+        return UserDevice::where('platform', $platform)
+            ->where('device_hash', hash('sha256', $deviceId))
+            ->where('user_id', '!=', $user->user_id)
+            ->exists();
     }
 
     /**
