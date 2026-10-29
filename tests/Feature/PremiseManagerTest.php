@@ -181,15 +181,6 @@ class PremiseManagerTest extends TestCase
         $this->assertStringNotContainsString('Norte', $response->json('token'));
     }
 
-    public function test_el_gestor_no_puede_usar_la_ruta_de_qr_de_administracion(): void
-    {
-        $manager = $this->makeManager($this->premise);
-
-        $this->as($manager)
-            ->postJson('/api/admin/premises/' . $this->otherPremise->premise_id . '/qr-tokens')
-            ->assertStatus(403);
-    }
-
     public function test_solo_el_gestor_puede_usar_la_ruta_de_gestor(): void
     {
         foreach ([$this->employeeRole, $this->adminRole] as $role) {

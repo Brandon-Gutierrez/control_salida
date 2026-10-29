@@ -72,7 +72,6 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
             Route::post('/premises', [PremiseController::class, 'store'])->name('premises.store');
             Route::put('/premises/{premise}', [PremiseController::class, 'update'])->name('premises.update');
             Route::put('/premises/{premise}/reasons', [PremiseReasonController::class, 'update'])->name('premises.reasons.update');
-            Route::post('/premises/{premise}/qr-tokens', [QrController::class, 'store'])->name('premises.qr-tokens.store');
 
             Route::get('/reasons', [ReasonController::class, 'index'])->name('reasons.index');
             Route::post('/reasons/sync', [ReasonController::class, 'sync'])->name('reasons.sync');

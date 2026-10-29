@@ -731,19 +731,25 @@ class LeaveFlowTest extends TestCase
             ->assertStatus(400)->assertExactJson(['status' => 1, 'message' => 'Error al obtener los motivos de salida']);
     }
 
-    public function test_el_admin_genera_el_qr_de_un_predio(): void
+    /** Responsable del predio "Prado": quien genera su QR desde la web. */
+    private function qrManager(): User
     {
-        $admin = User::create([
-            'external_identifier' => 'ad', 'name' => 'Ana', 'item' => 9,
-            'role_id' => Role::where('name', Role::ADMIN)->value('role_id'),
+        return User::create([
+            'external_identifier' => 'gestor', 'name' => 'Marta', 'item' => 9,
+            'role_id' => Role::where('name', Role::MANAGE_PREMISE)->value('role_id'),
+            'username' => 'marta', 'password' => bcrypt('x'), 'premise_id' => $this->premise->premise_id,
         ]);
+    }
+
+    public function test_el_responsable_genera_el_qr_de_su_predio(): void
+    {
         Redis::shouldReceive('setex')->once()->withArgs(fn ($key, $ttl, $id) => str_starts_with($key, 'Prado+')
             && $ttl === 330 && $id === $this->premise->premise_id);
         Redis::shouldReceive('get')->andReturn((string) $this->premise->premise_id);
         Redis::shouldReceive('ttl')->andReturn(330);
 
-        $this->signIn($admin, ClientPlatform::WEB)
-            ->postJson('/api/admin/premises/'.$this->premise->premise_id.'/qr-tokens')
+        $this->signIn($this->qrManager(), ClientPlatform::WEB)
+            ->postJson('/api/manager/qr-token')
             ->assertOk()
             ->assertJsonPath('status', 0)
             ->assertJsonPath('TTL', 300)
@@ -753,30 +759,20 @@ class LeaveFlowTest extends TestCase
 
     public function test_generar_el_qr_con_redis_caido_o_sin_confirmacion(): void
     {
-        $admin = User::create([
-            'external_identifier' => 'ad', 'name' => 'Ana', 'item' => 9,
-            'role_id' => Role::where('name', Role::ADMIN)->value('role_id'),
-        ]);
-        $url = '/api/admin/premises/'.$this->premise->premise_id.'/qr-tokens';
-
         Redis::shouldReceive('setex')->once()->andThrow(new \RuntimeException('redis down'));
-        $this->signIn($admin, ClientPlatform::WEB)->postJson($url)->assertStatus(503)->assertJson([
+        $this->signIn($this->qrManager(), ClientPlatform::WEB)->postJson('/api/manager/qr-token')->assertStatus(503)->assertJson([
             'status' => 1, 'code' => 'QR_SERVICE_UNAVAILABLE', 'retryable' => true,
         ]);
     }
 
     public function test_generar_el_qr_sin_confirmacion_de_redis(): void
     {
-        $admin = User::create([
-            'external_identifier' => 'ad', 'name' => 'Ana', 'item' => 9,
-            'role_id' => Role::where('name', Role::ADMIN)->value('role_id'),
-        ]);
         Redis::shouldReceive('setex')->once();
         Redis::shouldReceive('get')->andReturn(null);
         Redis::shouldReceive('ttl')->andReturn(330);
 
-        $this->signIn($admin, ClientPlatform::WEB)
-            ->postJson('/api/admin/premises/'.$this->premise->premise_id.'/qr-tokens')
+        $this->signIn($this->qrManager(), ClientPlatform::WEB)
+            ->postJson('/api/manager/qr-token')
             ->assertStatus(503)->assertJson(['code' => 'QR_STORE_FAILED', 'retryable' => true]);
     }
 }
