@@ -1,0 +1,66 @@
+# Control de salidas temporales — modo DESARROLLO (se suma al docker-compose.yml).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#   (o define COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml en .env)
+#
+# - El código del backend se monta desde BACKEND_PATH: los cambios se ven al instante.
+# - Solo HTTP en DEV_HTTP_PORT; sin redirección ni certificados.
+# - PostgreSQL y Redis se publican solo en 127.0.0.1 (puertos DEV_*), para inspeccionarlos.
+# - Para la web con recarga en caliente usa `flutter run` en tu equipo contra esta API:
+#     flutter run -d chrome --web-port 65085 --dart-define=API_BASE_URL=http://localhost:8080
+# Requiere Docker Compose 2.24 o superior (etiquetas !override).
+
+services:
+  db:
+    ports:
+      - "127.0.0.1:${DEV_DB_PORT:-15432}:5432"
+
+  redis:
+    ports:
+      - "127.0.0.1:${DEV_REDIS_PORT:-16379}:6379"
+
+  app:
+    image: control-salidas-api:dev
+    build:
+      target: dev
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:${DEV_HTTP_PORT:-8080}
+      LOG_LEVEL: debug
+      SESSION_SECURE_COOKIE: "false"
+      # Esta API (puerto DEV_HTTP_PORT) y `flutter run` en el puerto 65085.
+      SANCTUM_STATEFUL_DOMAINS: localhost:${DEV_HTTP_PORT:-8080},127.0.0.1:${DEV_HTTP_PORT:-8080},localhost:65085,127.0.0.1:65085
+      CORS_ALLOWED_ORIGINS: http://localhost:${DEV_HTTP_PORT:-8080},http://127.0.0.1:${DEV_HTTP_PORT:-8080},http://localhost:65085,http://127.0.0.1:65085
+    volumes:
+      # Solo el código: .env, vendor/ y storage/ del host no se tocan.
+      - ${BACKEND_PATH:-..}/app:/var/www/html/app
+      - ${BACKEND_PATH:-..}/config:/var/www/html/config
+      - ${BACKEND_PATH:-..}/database:/var/www/html/database
+      - ${BACKEND_PATH:-..}/routes:/var/www/html/routes
+      - ${BACKEND_PATH:-..}/public:/var/www/html/public
+      - ${BACKEND_PATH:-..}/tests:/var/www/html/tests
+      - ${BACKEND_PATH:-..}/bootstrap/app.php:/var/www/html/bootstrap/app.php
+      - ${BACKEND_PATH:-..}/bootstrap/providers.php:/var/www/html/bootstrap/providers.php
+      - ${BACKEND_PATH:-..}/artisan:/var/www/html/artisan
+      - ${BACKEND_PATH:-..}/composer.json:/var/www/html/composer.json
+      - ${BACKEND_PATH:-..}/composer.lock:/var/www/html/composer.lock
+      - ${BACKEND_PATH:-..}/phpunit.xml:/var/www/html/phpunit.xml
+      - backend_vendor:/var/www/html/vendor
+      - backend_storage:/var/www/html/storage
+      - backend_bootstrap_cache:/var/www/html/bootstrap/cache
+
+  web:
+    image: control-salidas-web:dev
+    environment:
+      PUBLIC_HOST: localhost:${DEV_HTTP_PORT:-8080}
+    ports: !override
+      - "${DEV_HTTP_PORT:-8080}:80"
+    volumes: !override
+      - ./nginx/gateway.dev.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/fastcgi-laravel.conf:/etc/nginx/fastcgi-laravel.conf:ro
+
+volumes:
+  backend_vendor:
+  backend_storage:
+  backend_bootstrap_cache:

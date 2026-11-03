@@ -1,0 +1,67 @@
+# Puerta de entrada en PRODUCCIÓN: HTTP (80) redirige a HTTPS (443); la web y la API
+# comparten dominio. Reemplaza la configuración por defecto de la imagen de la web
+# (se monta desde docker-compose.yml). El entrypoint de nginx sustituye ${PUBLIC_HTTPS_PORT}.
+
+# El DNS interno de Docker resuelve "app" aunque el contenedor se recree.
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    # Lo usa el healthcheck del contenedor.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 301 https://$host:${PUBLIC_HTTPS_PORT}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name _;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1h;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json application/wasm image/svg+xml;
+
+    # --- API Laravel (y el estado /up) -------------------------------------
+    location ~ ^/(api|sanctum)/ {
+        include /etc/nginx/fastcgi-laravel.conf;
+    }
+
+    location = /up {
+        include /etc/nginx/fastcgi-laravel.conf;
+    }
+
+    # --- Flutter Web -------------------------------------------------------
+    # Archivos que Flutter no versiona por nombre: nunca en caché.
+    location ~ ^/(index\.html|flutter_service_worker\.js|flutter_bootstrap\.js|version\.json|manifest\.json)$ {
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
