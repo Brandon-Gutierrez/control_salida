@@ -27,4 +27,11 @@ return [
         'register_checkout_url' => env('API_REGISTERCHECKOUT'),
     ],
 
+    // Administrador inicial que siembra `SuperAdminSeeder`: se identifica por su
+    // item corporativo y entra con sus credenciales del sistema externo.
+    'super_admin' => [
+        'item' => env('SUPERADMIN_ITEM'),
+        'name' => env('SUPERADMIN_NAME'),
+    ],
+
 ];

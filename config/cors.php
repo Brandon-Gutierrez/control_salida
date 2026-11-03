@@ -19,13 +19,16 @@ return [
     'paths' => [
         'api/*',
         'sanctum/csrf-cookie',
-     ],
+    ],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        'http://localhost:65085'
-        ],
+    // Orígenes separados por coma. Con la web servida en el mismo dominio que la
+    // API (Docker) no hace falta CORS; el valor por defecto es el de desarrollo.
+    'allowed_origins' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'http://localhost:65085')),
+    ))),
 
     'allowed_origins_patterns' => [],
 

@@ -24,5 +24,7 @@ class DatabaseSeeder extends Seeder
         foreach (['EMPLOYEE', 'ADMIN', 'MANAGE_PREMISE'] as $name) {
             Role::firstOrCreate(['name' => $name]);
         }
+
+        $this->call(SuperAdminSeeder::class);
     }
 }
