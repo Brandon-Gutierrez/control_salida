@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminSummaryController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveLimitController;
@@ -68,6 +69,8 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
     Route::prefix('admin')->name('admin.')
         ->middleware(['platform:web', 'role:'.Role::ADMIN])
         ->group(function () {
+            Route::get('/summary', AdminSummaryController::class)->name('summary');
+
             Route::get('/premises', [PremiseController::class, 'index'])->name('premises.index');
             Route::post('/premises', [PremiseController::class, 'store'])->name('premises.store');
             Route::put('/premises/{premise}', [PremiseController::class, 'update'])->name('premises.update');
