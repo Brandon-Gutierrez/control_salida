@@ -2,6 +2,9 @@
 
 namespace App\Services\External;
 
+use App\Exceptions\ApiException;
+use Illuminate\Http\Client\ConnectionException;
+
 /** Autentica credenciales contra el sistema externo de personal. */
 class ExternalAuthService
 {
@@ -9,11 +12,22 @@ class ExternalAuthService
 
     /**
      * @return array{external_identifier: mixed, name: mixed, item: mixed}|null
-     *                                                                          null si las credenciales no son válidas o el servicio falla.
+     *                                                                          null si las credenciales no son válidas.
+     *
+     * @throws ApiException 503 si Comteco no responde (no es un error de credenciales).
      */
     public function authenticate(string $username, string $password): ?array
     {
-        $response = $this->api->login($username, $password);
+        try {
+            $response = $this->api->login($username, $password);
+        } catch (ConnectionException) {
+            throw $this->unavailable();
+        }
+
+        // Una caída o saturación de Comteco no es una contraseña incorrecta.
+        if ($response->serverError() || $response->status() === 429) {
+            throw $this->unavailable();
+        }
 
         if ($response->failed() || $response->json('status') == 1) {
             return null;
@@ -24,6 +38,15 @@ class ExternalAuthService
             'name' => $response->json('name'),
             'item' => $response->json('item'),
         ];
+    }
+
+    private function unavailable(): ApiException
+    {
+        return ApiException::authFailure(
+            503,
+            'No se pudo conectar con el sistema de personal de Comteco. Intente nuevamente en unos minutos.',
+            'AUTH_SERVICE_UNAVAILABLE',
+        );
     }
 
     /**

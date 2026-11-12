@@ -8,7 +8,11 @@ use Illuminate\Support\Collection;
 
 class ReasonPremiseRepository
 {
-    /** Nombres de los motivos habilitados en el predio, ordenados alfabéticamente. */
+    /**
+     * Nombres de los motivos habilitados en el predio, ordenados
+     * alfabéticamente. No incluye los retirados del predio ni los que
+     * Comteco ya no ofrece.
+     */
     public function reasonNamesForPremise(int $premiseId): Collection
     {
         $reasonIds = ReasonPremise::where('premise_id', $premiseId)->pluck('reason_id');

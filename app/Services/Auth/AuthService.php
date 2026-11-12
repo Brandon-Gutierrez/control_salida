@@ -20,16 +20,21 @@ class AuthService
         private ExternalAuthService $externalAuth,
         private UserRepository $users,
         private DeviceBindingService $devices,
+        private LoginThrottle $throttle,
     ) {}
 
     /**
      * @param  string  $platform  Aplicación que inicia sesión (encabezado `X-Client-Platform`).
      * @param  ?string  $deviceId  Identificador del dispositivo (encabezado `DeviceId`).
+     * @param  ?string  $ip  IP de quien intenta entrar (para el límite de intentos).
      *
      * @throws ApiException si las credenciales o el acceso no son válidos.
      */
-    public function authenticate(string $username, string $password, string $platform, ?string $deviceId): User
+    public function authenticate(string $username, string $password, string $platform, ?string $deviceId, ?string $ip = null): User
     {
+        // Antes de gastar una llamada a Comteco: ¿esta cuenta o esta IP ya falló demasiado?
+        $this->throttle->assertAllowed($username, $ip);
+
         // Cada aplicación se identifica (web / mobile) y envía el identificador
         // de su dispositivo: el acceso y la vinculación dependen de ambos.
         if (! ClientPlatform::isValid($platform)) {
@@ -48,7 +53,17 @@ class AuthService
             );
         }
 
-        $user = $this->resolveUser($username, $password);
+        try {
+            $user = $this->resolveUser($username, $password);
+        } catch (ApiException $exception) {
+            // Solo las credenciales incorrectas cuentan (no una caída de Comteco).
+            if ($exception->errorCode() === 'INVALID_CREDENTIALS') {
+                $this->throttle->recordFailure($username, $ip);
+            }
+
+            throw $exception;
+        }
+        $this->throttle->clear($username, $ip);
 
         // web: ADMIN y MANAGE_PREMISE. mobile: ADMIN y EMPLOYEE.
         $roleName = $user->role?->name;
@@ -120,6 +135,7 @@ class AuthService
 
     private function invalidCredentials(): ApiException
     {
-        return ApiException::authFailure(401, 'Credenciales inválidas.');
+        // Mismo mensaje y código exista o no la cuenta: no revela qué usuarios existen.
+        return ApiException::authFailure(401, 'Credenciales inválidas.', 'INVALID_CREDENTIALS');
     }
 }

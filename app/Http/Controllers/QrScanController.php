@@ -11,6 +11,10 @@ class QrScanController extends Controller
     /** Escaneo de un QR de predio: inicia la salida o registra el retorno. */
     public function __invoke(ScanQrRequest $request, QrScanService $scan): JsonResponse
     {
-        return response()->json($scan->scan($request->user(), $request->validated('qrData')));
+        return response()->json($scan->scan(
+            $request->user(),
+            $request->validated('qrData'),
+            $request->attributes->get('location'),
+        ));
     }
 }

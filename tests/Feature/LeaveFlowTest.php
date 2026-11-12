@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\LeaveReason;
 use App\Models\Premise;
 use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
 use App\Repositories\RecordRepository;
+use App\Services\Leave\ConfirmedOperationRecorder;
 use App\Services\Leave\LeaveLimitService;
 use App\Support\ClientPlatform;
 use GuzzleHttp\Promise\PromiseInterface;
@@ -122,10 +124,16 @@ class LeaveFlowTest extends TestCase
         ], $override);
     }
 
-    private function scan(string $qr = 'Prado+token'): TestResponse
+    private function scan(string $qr = 'Prado+token', array $location = []): TestResponse
     {
         return $this->signIn($this->employee, ClientPlatform::MOBILE)
-            ->postJson('/api/qr/scan', ['qrData' => $qr] + $this->location());
+            ->postJson('/api/qr/scan', ['qrData' => $qr] + $this->location($location));
+    }
+
+    /** La persona está físicamente en este predio. */
+    private function at(Premise $premise): array
+    {
+        return ['latitude' => (float) $premise->latitude, 'longitude' => (float) $premise->longitude];
     }
 
     private function confirm(array $body = []): TestResponse
@@ -340,7 +348,8 @@ class LeaveFlowTest extends TestCase
         $this->fakeExternal($this->onLeaveCheckout());
         $record = $this->openLeave($this->premise);
 
-        $this->scan()->assertStatus(403)->assertExactJson([
+        // Escanea el QR del otro predio estando allí: la ubicación es válida, el retorno no.
+        $this->scan('Prado+token', $this->at($this->otherPremise))->assertStatus(403)->assertExactJson([
             'status' => 1,
             'code' => 'RETURN_PREMISE_MISMATCH',
             'message' => 'El predio de retorno es diferente al predio de salida',
@@ -470,7 +479,8 @@ class LeaveFlowTest extends TestCase
     {
         $this->ticketIs($this->ticketFor($this->otherPremise));
 
-        $this->confirm()->assertStatus(403)->assertExactJson([
+        // Está en el predio del comprobante (Norte), pero eligió el predio Prado.
+        $this->confirm($this->at($this->otherPremise))->assertStatus(403)->assertExactJson([
             'status' => 1,
             'message' => 'El predio seleccionado no coincide con el predio del código QR.',
         ]);
@@ -670,7 +680,8 @@ class LeaveFlowTest extends TestCase
             ->assertJsonPath('name', 'Juan')
             ->assertJsonPath('item', 2)
             ->assertJsonPath('role', 'EMPLOYEE')
-            ->assertJsonStructure(['token', 'photo_url', 'job_title', 'area', 'stats' => ['day', 'week', 'month']]);
+            ->assertJsonStructure(['photo_url', 'job_title', 'area', 'stats' => ['day', 'week', 'month']])
+            ->assertJsonMissingPath('token');
     }
 
     public function test_estado_de_salida_con_salida_activa_incluye_motivo_y_fecha(): void
@@ -699,37 +710,7 @@ class LeaveFlowTest extends TestCase
             ->assertStatus(400)->assertExactJson(['status' => 1, 'message' => 'Error externo']);
     }
 
-    // ----------------------------------------------------------- admin sync / QR
-
-    public function test_el_admin_sincroniza_los_motivos(): void
-    {
-        $admin = User::create([
-            'external_identifier' => 'ad', 'name' => 'Ana', 'item' => 9,
-            'role_id' => Role::where('name', Role::ADMIN)->value('role_id'),
-        ]);
-        $this->fakeExternal(['reasons' => fn () => Http::response(['data' => [
-            ['codigo' => 'T', 'descripcion' => 'Trámite'],
-            ['codigo' => 'M', 'descripcion' => 'Médico'],
-        ]])]);
-
-        $first = $this->signIn($admin, ClientPlatform::WEB)->postJson('/api/admin/reasons/sync')->assertOk();
-        $this->assertSame('Motivos de salida actualizados correctamente', $first->json('message'));
-        $this->assertCount(1, $first->json('newPremises'));
-        $this->assertDatabaseHas('reasons', ['code' => 'M', 'name' => 'Médico']);
-
-        $this->signIn($admin, ClientPlatform::WEB)->postJson('/api/admin/reasons/sync')
-            ->assertOk()->assertExactJson(['status' => 0, 'message' => 'No se encontraron motivos de salida nuevas']);
-    }
-
-    public function test_sincronizar_motivos_con_error_externo(): void
-    {
-        $admin = User::create([
-            'external_identifier' => 'ad', 'name' => 'Ana', 'item' => 9,
-            'role_id' => Role::where('name', Role::ADMIN)->value('role_id'),
-        ]);
-        $this->signIn($admin, ClientPlatform::WEB)->postJson('/api/admin/reasons/sync')
-            ->assertStatus(400)->assertExactJson(['status' => 1, 'message' => 'Error al obtener los motivos de salida']);
-    }
+    // ----------------------------------------------------------- QR del responsable (la sincronización de motivos está en ReasonSyncTest)
 
     /** Responsable del predio "Prado": quien genera su QR desde la web. */
     private function qrManager(): User
@@ -774,5 +755,220 @@ class LeaveFlowTest extends TestCase
         $this->signIn($this->qrManager(), ClientPlatform::WEB)
             ->postJson('/api/manager/qr-token')
             ->assertStatus(503)->assertJson(['code' => 'QR_STORE_FAILED', 'retryable' => true]);
+    }
+
+    // -------------------------------------------- formato real de Comteco
+
+    /** Consulta diaria con el formato real de Comteco. */
+    private function realCheckout(?string $returnedAt): array
+    {
+        return ['checkout' => fn () => Http::response([
+            'error' => 0,
+            'message' => 'Ok',
+            'data' => [[
+                'id_solicitud' => '100445',
+                'nro_item' => '2',
+                'cod_motivo' => 'T',
+                'fecha_salida' => '2026-09-09 11:17:06',
+                'fecha_retorno' => $returnedAt,
+            ]],
+        ])];
+    }
+
+    public function test_con_el_formato_real_una_salida_sin_retorno_registra_el_retorno(): void
+    {
+        $this->qrIsValidFor($this->premise);
+        $record = $this->openLeave($this->premise);
+        $this->fakeExternal($this->realCheckout(null));
+
+        $this->scan()->assertOk()->assertJsonPath('action', 'showHome');
+
+        Http::assertSent(fn (HttpRequest $r) => str_starts_with($r->url(), env('API_REGISTERCHECKOUT'))
+            && $r['in_id_solicitud'] === '100445' && $r['in_item'] == 2);
+        $this->assertNotNull($record->fresh()->return_time);
+    }
+
+    public function test_si_ya_registro_su_retorno_hoy_se_ofrecen_los_motivos_y_comteco_decide(): void
+    {
+        Redis::shouldReceive('get')->with('Prado+token')->andReturn((string) $this->premise->premise_id);
+        Redis::shouldReceive('setex')->once();
+        Redis::shouldReceive('ttl')->andReturn(40);
+        $this->fakeExternal($this->realCheckout('2026-09-09 12:00:00'));
+
+        $this->scan()->assertOk()->assertJsonPath('action', 'showReasons');
+    }
+
+    public function test_el_estado_con_retorno_ya_registrado_indica_que_esta_dentro(): void
+    {
+        $this->fakeExternal($this->realCheckout('2026-09-09 12:00:00'));
+
+        $this->signIn($this->employee, ClientPlatform::MOBILE)
+            ->getJson('/api/me/leave-status')
+            ->assertOk()
+            ->assertJsonPath('isLeave', false);
+    }
+
+    public function test_el_estado_con_salida_abierta_en_formato_real_indica_que_esta_fuera(): void
+    {
+        $this->fakeExternal($this->realCheckout(null));
+        $this->openLeave($this->premise);
+
+        $this->signIn($this->employee, ClientPlatform::MOBILE)
+            ->getJson('/api/me/leave-status')
+            ->assertOk()
+            ->assertJsonPath('isLeave', true)
+            ->assertJsonPath('reason', 'Trámite');
+    }
+
+    public function test_una_respuesta_con_error_desconocido_no_decide_nada(): void
+    {
+        $this->qrIsValidFor($this->premise);
+        $this->fakeExternal(['checkout' => fn () => Http::response(['error' => 7, 'message' => 'caído', 'data' => []])]);
+
+        $this->scan()->assertStatus(502)
+            ->assertExactJson($this->temporaryFailure('CHECKOUT_RESPONSE_INVALID', true));
+    }
+
+    // ------------------------------------------ rechazo por el contenido
+
+    public function test_comteco_puede_rechazar_la_salida_con_http_200(): void
+    {
+        $this->ticketIs($this->ticketFor($this->premise));
+        $this->fakeExternal(['register' => fn () => Http::response(['error' => 1, 'message' => 'Ya registró una salida hoy'])]);
+
+        $this->confirm()->assertStatus(422)->assertJson([
+            'status' => 1,
+            'code' => 'LEAVE_REJECTED_BY_EXTERNAL',
+            'message' => 'Ya registró una salida hoy',
+            'retryable' => false,
+        ]);
+        $this->assertDatabaseCount('records', 0);
+    }
+
+    public function test_comteco_puede_rechazar_el_retorno_con_http_200(): void
+    {
+        $this->qrIsValidFor($this->premise);
+        $record = $this->openLeave($this->premise);
+        $this->fakeExternal($this->realCheckout(null) + [
+            'register' => fn () => Http::response(['error' => 3, 'message' => 'Solicitud ya cerrada']),
+        ]);
+
+        $this->scan()->assertStatus(422)->assertJson([
+            'code' => 'RETURN_REJECTED_BY_EXTERNAL',
+            'message' => 'Solicitud ya cerrada',
+        ]);
+        $this->assertNull($record->fresh()->return_time);
+    }
+
+    // ------------------------------------------- incidentes en la bitácora
+
+    public function test_una_salida_ajena_a_este_sistema_deja_constancia_en_la_bitacora(): void
+    {
+        $this->qrIsValidFor($this->premise);
+        // Comteco la ve abierta, pero aquí no hay ninguna salida local.
+        $this->fakeExternal($this->realCheckout(null));
+
+        $this->scan()->assertStatus(403)->assertJsonPath('code', 'RETURN_PREMISE_MISMATCH');
+
+        $entry = AuditLog::where('event', 'leave.foreign_open_in_external')->firstOrFail();
+        $this->assertSame($this->employee->user_id, $entry->subject_id);
+        $this->assertSame('100445', $entry->details['request_id']);
+        $this->assertSame('T', $entry->details['reason_code']);
+    }
+
+    public function test_el_retorno_desde_otro_predio_no_se_confunde_con_una_salida_ajena(): void
+    {
+        $this->qrIsValidFor($this->premise);
+        $this->openLeave($this->otherPremise);
+        $this->fakeExternal($this->realCheckout(null));
+
+        $this->scan()->assertStatus(403)->assertJsonPath('code', 'RETURN_PREMISE_MISMATCH');
+
+        $this->assertDatabaseCount('audit_logs', 0);
+    }
+
+    public function test_un_resultado_incierto_de_la_salida_queda_en_la_bitacora(): void
+    {
+        $this->ticketIs($this->ticketFor($this->premise));
+        $this->fakeExternal(['register' => fn () => throw new ConnectionException('sin respuesta')]);
+
+        $this->confirm()->assertStatus(502)->assertJsonPath('code', 'LEAVE_REGISTRATION_RESULT_UNKNOWN');
+
+        $entry = AuditLog::where('event', 'leave.result_unknown')->firstOrFail();
+        $this->assertSame('Trámite', $entry->details['reason']);
+        $this->assertDatabaseCount('records', 0);
+    }
+
+    public function test_un_resultado_incierto_del_retorno_queda_en_la_bitacora(): void
+    {
+        $this->qrIsValidFor($this->premise);
+        $this->openLeave($this->premise);
+        $this->fakeExternal($this->realCheckout(null) + ['register' => fn () => throw new ConnectionException('x')]);
+
+        $this->scan()->assertStatus(502)->assertJsonPath('code', 'RETURN_RESULT_UNKNOWN');
+
+        $this->assertSame('100445', AuditLog::where('event', 'return.result_unknown')->firstOrFail()->details['request_id']);
+    }
+
+    // ----------------------- Comteco aceptó pero falla la escritura local
+
+    private function failingRecords(int $failTimes): object
+    {
+        $counter = new class
+        {
+            public int $calls = 0;
+        };
+        $this->app->bind(RecordRepository::class, fn () => new class($counter, $failTimes) extends RecordRepository
+        {
+            public function __construct(private object $counter, private int $failTimes) {}
+
+            public function registerLeave(int $userId, int $reasonPremiseId, ?\Carbon\Carbon $leftAt = null): Record
+            {
+                $this->counter->calls++;
+                if ($this->counter->calls <= $this->failTimes) {
+                    throw new \RuntimeException('base de datos caída');
+                }
+
+                return parent::registerLeave($userId, $reasonPremiseId, $leftAt);
+            }
+        });
+
+        return $counter;
+    }
+
+    public function test_si_falla_un_intento_local_se_reintenta_y_se_guarda(): void
+    {
+        ConfirmedOperationRecorder::$pauseMicroseconds = 0;
+        $this->ticketIs($this->ticketFor($this->premise));
+        Redis::shouldReceive('del')->once();
+        $counter = $this->failingRecords(failTimes: 2);
+
+        $this->confirm()->assertOk();
+
+        $this->assertSame(3, $counter->calls);
+        $this->assertDatabaseCount('records', 1);
+        $this->assertDatabaseCount('audit_logs', 0);
+    }
+
+    public function test_si_la_escritura_local_sigue_fallando_no_se_reenvia_a_comteco_y_queda_en_la_bitacora(): void
+    {
+        ConfirmedOperationRecorder::$pauseMicroseconds = 0;
+        $this->ticketIs($this->ticketFor($this->premise));
+        Redis::shouldReceive('del')->once();
+        $counter = $this->failingRecords(failTimes: 99);
+
+        // Comteco ya aceptó: la persona no recibe un error que la lleve a reintentar.
+        $this->confirm()->assertOk()->assertJsonPath('status', 0);
+
+        $this->assertSame(3, $counter->calls);
+        $this->assertDatabaseCount('records', 0);
+        // Una sola vez a Comteco: los reintentos son solo de la escritura local.
+        $this->assertCount(1, Http::recorded(
+            fn (HttpRequest $r) => str_starts_with($r->url(), env('API_REGISTERCHECKOUT')),
+        ));
+        $entry = AuditLog::where('event', 'leave.local_write_failed')->firstOrFail();
+        $this->assertSame($this->employee->user_id, $entry->subject_id);
+        $this->assertSame('Trámite', $entry->details['reason']);
+        $this->assertSame('Prado', $entry->details['premise']);
     }
 }

@@ -5,9 +5,9 @@ namespace App\Services\Leave;
 use App\Exceptions\ApiException;
 use App\Models\User;
 use App\Repositories\RecordRepository;
+use App\Services\External\CheckoutStatus;
 use App\Services\External\EmployeeProfileService;
 use App\Services\External\ExternalApiService;
-use Illuminate\Support\Carbon;
 
 /** Datos de la persona y si está fuera en este momento, para la pantalla principal de la app móvil. */
 class LeaveStatusService
@@ -36,27 +36,26 @@ class LeaveStatusService
             throw $this->externalError();
         }
 
-        if ($checkout->json('error') === -1 && empty($checkout->json('data'))) {
+        $status = CheckoutStatus::fromResponse($checkout);
+        if ($status->isInvalid()) {
+            throw $this->externalError();
+        }
+
+        // Sin salida, o con todas sus salidas de hoy ya con retorno: está dentro.
+        if (! $status->hasOpenLeave()) {
             return [
                 'name' => $employee['name'],
                 'item' => $employee['item'],
-                'token' => $employee->json('token'),
                 'isLeave' => false,
                 ...$this->profileExtras($user),
             ];
         }
 
-        $data = $checkout->json('data');
-        $leftAt = $data[0]['fecha_salida']
-            ? Carbon::createFromFormat('Y-m-d H:i:s', $data[0]['fecha_salida'])->toIso8601String()
-            : null;
-
         return [
             'name' => $employee['name'],
             'item' => $employee['item'],
-            'token' => $employee->json('token'),
             'isLeave' => true,
-            'dateLeave' => $leftAt,
+            'dateLeave' => $status->leftAt()?->toIso8601String(),
             // El motivo no viene del sistema externo: se toma del registro
             // local guardado al confirmar la salida.
             'reason' => $this->records->lastReasonName($user->user_id),

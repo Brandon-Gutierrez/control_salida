@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\Record;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class RecordRepository
 {
@@ -19,7 +20,9 @@ class RecordRepository
         return DB::transaction(function () use ($userId, $reasonPremiseId, $leftAt) {
             $connection = DB::connection();
             if ($connection->getDriverName() === 'pgsql') {
+                $waitStart = hrtime(true);
                 $connection->statement('LOCK TABLE records IN EXCLUSIVE MODE');
+                $this->reportLockWait((hrtime(true) - $waitStart) / 1_000_000);
             }
 
             $record = new Record([
@@ -43,6 +46,22 @@ class RecordRepository
         });
     }
 
+    /**
+     * Espera (ms) para obtener el bloqueo de la tabla. Si pasa de este umbral
+     * se avisa en el log: es la señal de que conviene un contador transaccional
+     * propio antes de renunciar al folio consecutivo.
+     */
+    private const SLOW_LOCK_WAIT_MS = 250;
+
+    private function reportLockWait(float $milliseconds): void
+    {
+        if ($milliseconds >= self::SLOW_LOCK_WAIT_MS) {
+            Log::warning('Espera alta del bloqueo de `records` al registrar una salida.', [
+                'wait_ms' => round($milliseconds),
+            ]);
+        }
+    }
+
     /** Cierra solo la salida abierta más reciente de la persona; devuelve cuántas cerró (0 o 1). */
     public function registerReturn(int $userId, ?Carbon $returnedAt = null): int
     {
@@ -53,6 +72,12 @@ class RecordRepository
             ->first();
 
         return $record ? (int) $record->update(['return_time' => $returnedAt ?? now()]) : 0;
+    }
+
+    /** La persona tiene alguna salida abierta (sin retorno) en el historial local. */
+    public function hasOpenLeave(int $userId): bool
+    {
+        return Record::where('user_id', $userId)->whereNull('return_time')->exists();
     }
 
     /** La salida abierta más reciente de la persona fue desde este predio. */

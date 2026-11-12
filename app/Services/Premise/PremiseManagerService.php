@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\Premise;
 use App\Models\User;
 use App\Repositories\RoleRepository;
+use App\Services\Audit\AuditLogger;
 use App\Repositories\UserActiveSessionRepository;
 use App\Repositories\UserRepository;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,7 @@ class PremiseManagerService
         private UserRepository $users,
         private RoleRepository $roles,
         private UserActiveSessionRepository $sessions,
+        private AuditLogger $audit,
     ) {}
 
     /**
@@ -38,7 +40,7 @@ class PremiseManagerService
      *
      * @throws ApiException si el usuario no tiene el rol MANAGE_PREMISE.
      */
-    public function assign(Premise $premise, ?int $userId): void
+    public function assign(Premise $premise, ?int $userId, ?User $actor = null): void
     {
         $newManager = null;
         if ($userId !== null) {
@@ -48,14 +50,27 @@ class PremiseManagerService
             }
         }
 
-        DB::transaction(function () use ($premise, $newManager) {
+        $changes = [];
+        DB::transaction(function () use ($premise, $newManager, &$changes) {
             foreach ($this->users->premiseManagersOf($premise->premise_id, $newManager?->user_id) as $previous) {
                 $previous->update(['premise_id' => null]);
                 $this->sessions->deleteAllForUser($previous->user_id);
+                $changes[] = [$previous, $premise->name, null];
             }
 
-            $newManager?->update(['premise_id' => $premise->premise_id]);
+            if ($newManager && $newManager->premise_id !== $premise->premise_id) {
+                $from = $newManager->premise_id ? Premise::whereKey($newManager->premise_id)->value('name') : null;
+                $newManager->update(['premise_id' => $premise->premise_id]);
+                $changes[] = [$newManager, $from, $premise->name];
+            }
         });
+
+        foreach ($changes as [$manager, $from, $to]) {
+            $this->audit->record(AuditLogger::MANAGER_PREMISE_CHANGED, $actor, $manager, [
+                'premise_from' => $from,
+                'premise_to' => $to,
+            ]);
+        }
     }
 
     /**
@@ -64,7 +79,7 @@ class PremiseManagerService
      *
      * @throws ApiException si la cuenta no es de responsable o el predio ya tiene otro.
      */
-    public function moveToPremise(User $user, int $premiseId): User
+    public function moveToPremise(User $user, int $premiseId, ?User $actor = null): User
     {
         if (! $user->isPremiseManager()) {
             throw ApiException::failure(422, 'Solo las cuentas de gestor de predio tienen un predio asignado.');
@@ -72,7 +87,13 @@ class PremiseManagerService
 
         $this->assertPremiseIsFree($premiseId, $user->user_id);
 
+        $from = $user->premise_id ? Premise::whereKey($user->premise_id)->value('name') : null;
         $user->update(['premise_id' => $premiseId]);
+
+        $this->audit->record(AuditLogger::MANAGER_PREMISE_CHANGED, $actor, $user, [
+            'premise_from' => $from,
+            'premise_to' => Premise::whereKey($premiseId)->value('name'),
+        ]);
 
         return $user->fresh()->load(['role', 'premise']);
     }
@@ -86,7 +107,7 @@ class PremiseManagerService
      *
      * @throws ApiException si el predio ya tiene responsable.
      */
-    public function create(array $data): array
+    public function create(array $data, ?User $actor = null): array
     {
         $this->assertPremiseIsFree((int) $data['premise_id'], null);
 
@@ -104,6 +125,12 @@ class PremiseManagerService
 
         $wasGenerated = ! array_key_exists('password', $data) || $data['password'] === null;
 
+        $this->audit->record(AuditLogger::MANAGER_CREATED, $actor, $user, [
+            'username' => $data['username'],
+            'premise' => Premise::whereKey($data['premise_id'])->value('name'),
+            'password_generated' => $wasGenerated,
+        ]);
+
         return [$user->load(['role', 'premise']), $wasGenerated ? $password : null];
     }
 
@@ -115,7 +142,7 @@ class PremiseManagerService
      *
      * @throws ApiException si la cuenta no es un responsable local.
      */
-    public function changePassword(User $user, ?string $provided): ?string
+    public function changePassword(User $user, ?string $provided, ?User $actor = null): ?string
     {
         if (! $user->isPremiseManager() || $user->username === null) {
             throw ApiException::failure(
@@ -128,6 +155,9 @@ class PremiseManagerService
         $user->update(['password' => Hash::make($password)]);
 
         $this->sessions->deleteAllForUser($user->user_id);
+
+        // Solo se anota que cambió y cómo; nunca la contraseña.
+        $this->audit->record(AuditLogger::PASSWORD_CHANGED, $actor, $user, ['generated' => $provided === null || $provided === '']);
 
         return $provided ? null : $password;
     }

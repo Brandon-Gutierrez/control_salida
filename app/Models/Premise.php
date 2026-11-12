@@ -5,10 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /** Predio desde el que el personal registra sus salidas. */
 class Premise extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'premises';
 
     protected $primaryKey = 'premise_id';
@@ -19,12 +22,12 @@ class Premise extends Model
         'longitude',
     ];
 
-    /** Motivos de salida permitidos en el predio. */
+    /** Motivos de salida permitidos en el predio (sin las relaciones retiradas). */
     public function reasons(): BelongsToMany
     {
         return $this->belongsToMany(LeaveReason::class, 'reason_premise', 'premise_id', 'reason_id')
-            ->using(ReasonPremise::class)
-            ->withTimestamps();
+            ->withTimestamps()
+            ->wherePivotNull('deleted_at');
     }
 
     /** Responsables del predio (cuentas con rol MANAGE_PREMISE). */

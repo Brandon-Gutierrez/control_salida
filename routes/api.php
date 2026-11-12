@@ -46,10 +46,10 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
         Route::get('/me/leave-status', LeaveStatusController::class)->name('me.leave-status');
         Route::get('/me/leave-stats', LeaveStatsController::class)->name('me.leave-stats');
         Route::post('/qr/scan', QrScanController::class)
-            ->middleware('premise.location')->name('qr.scan');
+            ->middleware('location.proof')->name('qr.scan');
         Route::get('/premises/{premise:name}/reasons', [PremiseReasonController::class, 'index'])->name('premises.reasons');
         Route::post('/leaves', [LeaveController::class, 'store'])
-            ->middleware('premise.location')->name('leaves.store');
+            ->middleware('location.proof')->name('leaves.store');
     });
 
     // Responsable de predio (app web)
@@ -77,6 +77,7 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
             Route::put('/premises/{premise}/reasons', [PremiseReasonController::class, 'update'])->name('premises.reasons.update');
 
             Route::get('/reasons', [ReasonController::class, 'index'])->name('reasons.index');
+            Route::get('/reasons/catalog', [ReasonController::class, 'catalog'])->name('reasons.catalog');
             Route::post('/reasons/sync', [ReasonController::class, 'sync'])->name('reasons.sync');
 
             Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');

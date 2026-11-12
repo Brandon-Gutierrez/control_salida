@@ -5,6 +5,7 @@ namespace App\Services\Account;
 use App\Models\Premise;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Leave\LeaveReasonSyncService;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -14,10 +15,13 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class AdminSummaryService
 {
+    public function __construct(private LeaveReasonSyncService $reasonSync) {}
+
     /**
      * @return array{
      *     premises: array{total: int, without_location: int, without_manager: int, without_reasons: int},
-     *     users: array{total: int, admins: int, managers_without_premise: int, employees_without_app: int}
+     *     users: array{total: int, admins: int, managers_without_premise: int, employees_without_app: int},
+     *     reasons_sync: array{status: string, source: string, at: string, error: ?string}|null
      * }
      */
     public function summary(): array
@@ -40,6 +44,21 @@ class AdminSummaryService
                     ->whereDoesntHave('devices', fn (Builder $device) => $device->where('platform', 'mobile'))
                     ->count(),
             ],
+            // Si la última sincronización falló, Inicio lo avisa.
+            'reasons_sync' => $this->reasonSyncSummary(),
+        ];
+    }
+
+    /** @return array{status: string, source: string, at: string, error: ?string}|null */
+    private function reasonSyncSummary(): ?array
+    {
+        $status = $this->reasonSync->status();
+
+        return $status === null ? null : [
+            'status' => $status['status'],
+            'source' => $status['source'],
+            'at' => $status['at'],
+            'error' => $status['error'] ?? null,
         ];
     }
 

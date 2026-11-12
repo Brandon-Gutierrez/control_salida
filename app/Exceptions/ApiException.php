@@ -19,9 +19,32 @@ class ApiException extends RuntimeException
 {
     private const TEMPORARY_FAILURE_HTTP_STATUS = 502;
 
-    private function __construct(private array $body, private int $httpStatus)
+    private function __construct(private array $body, private int $httpStatus, private array $headers = [])
     {
         parent::__construct($body['message'] ?? 'Error de API.');
+    }
+
+    /** Código del error (`code` del cuerpo), si lo tiene. */
+    public function errorCode(): ?string
+    {
+        return $this->body['code'] ?? null;
+    }
+
+    /** Demasiados intentos: 429 con el tiempo de espera (cabecera `Retry-After` y `retry_after`). */
+    public static function tooManyAttempts(int $retryAfterSeconds, string $code): self
+    {
+        $retryAfterSeconds = max(1, $retryAfterSeconds);
+
+        return new self(
+            [
+                'status' => 'ERROR',
+                'code' => $code,
+                'message' => "Demasiados intentos. Intente nuevamente en {$retryAfterSeconds} segundos.",
+                'retry_after' => $retryAfterSeconds,
+            ],
+            429,
+            ['Retry-After' => (string) $retryAfterSeconds],
+        );
     }
 
     /** Error con el formato numérico (`status: 1`). */
@@ -74,6 +97,6 @@ class ApiException extends RuntimeException
 
     public function render(): JsonResponse
     {
-        return response()->json($this->body, $this->httpStatus);
+        return response()->json($this->body, $this->httpStatus, $this->headers);
     }
 }

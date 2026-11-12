@@ -5,11 +5,16 @@ namespace App\Services\Leave;
 use App\Models\Record;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Cuántas veces salió una persona y cuántos minutos estuvo fuera, según los
  * registros locales, en el día, la semana (lunes a domingo) y el mes
  * calendario en curso (no los últimos 7 o 30 días).
+ *
+ * Los totales los calcula la base de datos (COUNT y SUM sobre las salidas de
+ * esa persona, con el índice de usuario y fecha): no se traen las filas a PHP,
+ * así el costo no crece con el historial.
  */
 class LeaveStatsService
 {
@@ -17,30 +22,21 @@ class LeaveStatsService
     public function forUser(User $user): array
     {
         $now = now();
+        $startOfToday = $now->copy()->startOfDay();
         $periods = [
-            'day' => $now->copy()->startOfDay(),
+            'day' => $startOfToday,
             'week' => $now->copy()->startOfWeek(Carbon::MONDAY),
             'month' => $now->copy()->startOfMonth(),
         ];
 
-        $records = Record::where('user_id', $user->user_id)
-            ->where('leave_time', '>=', min($periods))
-            ->get(['leave_time', 'return_time'])
-            // Una salida anterior a hoy sin retorno no se cuenta: se avisa aparte.
-            ->reject(fn ($record) => $this->isUnreturnedBefore($record, $now->copy()->startOfDay()));
+        $totals = $this->totals($user, $periods, min($periods), null, $now);
 
         $stats = [];
         foreach ($periods as $name => $start) {
-            $inPeriod = $records->filter(fn ($record) => Carbon::parse($record->leave_time)->gte($start));
             $stats[$name] = [
                 'from' => $start->toDateString(),
-                'exits' => $inPeriod->count(),
-                // Una salida sin retorno cuenta hasta este momento.
-                'minutes' => (int) round($inPeriod->sum(function ($record) use ($now) {
-                    $end = $record->return_time ? Carbon::parse($record->return_time) : $now;
-
-                    return max(0, Carbon::parse($record->leave_time)->diffInSeconds($end, false)) / 60;
-                })),
+                'exits' => $totals[$name]['exits'],
+                'minutes' => $totals[$name]['minutes'],
             ];
         }
 
@@ -51,7 +47,7 @@ class LeaveStatsService
      * Salidas y minutos fuera entre dos fechas (ambas incluidas). Igual que en
      * `forUser`, una salida anterior a hoy sin retorno no se cuenta.
      *
-     * @return array{from: string, to: string, exits: int, minutes: int}
+     * @return array{from: string, to: string, exits: int, minutes: int, unreturned_leaves: array}
      */
     public function forRange(User $user, Carbon $from, Carbon $to): array
     {
@@ -59,21 +55,13 @@ class LeaveStatsService
         $start = $from->copy()->startOfDay();
         $end = $to->copy()->endOfDay();
 
-        $records = Record::where('user_id', $user->user_id)
-            ->where('leave_time', '>=', $start)
-            ->where('leave_time', '<=', $end)
-            ->get(['leave_time', 'return_time'])
-            ->reject(fn ($record) => $this->isUnreturnedBefore($record, $now->copy()->startOfDay()));
+        $totals = $this->totals($user, ['range' => $start], $start, $end, $now)['range'];
 
         return [
             'from' => $start->toDateString(),
             'to' => $end->toDateString(),
-            'exits' => $records->count(),
-            'minutes' => (int) round($records->sum(function ($record) use ($now) {
-                $finish = $record->return_time ? Carbon::parse($record->return_time) : $now;
-
-                return max(0, Carbon::parse($record->leave_time)->diffInSeconds($finish, false)) / 60;
-            })),
+            'exits' => $totals['exits'],
+            'minutes' => $totals['minutes'],
             // Solo las del rango; las de hoy se omiten porque aún puede marcar retorno.
             'unreturned_leaves' => $this->unreturnedBeforeToday($user, $start, $end),
         ];
@@ -104,8 +92,56 @@ class LeaveStatsService
             ->all();
     }
 
-    private function isUnreturnedBefore(Record $record, Carbon $startOfToday): bool
+    /**
+     * Cantidad de salidas y minutos fuera de cada período, en una sola consulta.
+     * Una salida sin retorno cuenta hasta este momento; una anterior a hoy sin
+     * retorno no cuenta (se avisa aparte).
+     *
+     * @param  array<string, Carbon>  $periods  Nombre => inicio del período.
+     * @return array<string, array{exits: int, minutes: int}>
+     */
+    private function totals(User $user, array $periods, Carbon $since, ?Carbon $until, Carbon $now): array
     {
-        return $record->return_time === null && Carbon::parse($record->leave_time)->lt($startOfToday);
+        $seconds = $this->secondsOutSql();
+
+        $columns = [];
+        $bindings = [];
+        foreach ($periods as $name => $start) {
+            $columns[] = "SUM(CASE WHEN leave_time >= ? THEN 1 ELSE 0 END) AS {$name}_exits";
+            $bindings[] = $start->toDateTimeString();
+            $columns[] = "SUM(CASE WHEN leave_time >= ? THEN {$seconds} ELSE 0 END) AS {$name}_seconds";
+            $bindings[] = $start->toDateTimeString();
+            $bindings[] = $now->toDateTimeString();
+        }
+
+        $row = DB::table('records')
+            ->selectRaw(implode(', ', $columns), $bindings)
+            ->where('user_id', $user->user_id)
+            ->where('leave_time', '>=', $since->toDateTimeString())
+            ->when($until, fn ($query) => $query->where('leave_time', '<=', $until->toDateTimeString()))
+            ->whereRaw('NOT (return_time IS NULL AND leave_time < ?)', [$now->copy()->startOfDay()->toDateTimeString()])
+            ->first();
+
+        $totals = [];
+        foreach (array_keys($periods) as $name) {
+            $totals[$name] = [
+                'exits' => (int) ($row->{"{$name}_exits"} ?? 0),
+                'minutes' => (int) round(((float) ($row->{"{$name}_seconds"} ?? 0)) / 60),
+            ];
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Segundos que estuvo fuera en una fila (hasta el retorno, o hasta el
+     * momento recibido como parámetro si aún no volvió); nunca negativo.
+     * Lleva un `?` con ese momento.
+     */
+    private function secondsOutSql(): string
+    {
+        return DB::connection()->getDriverName() === 'pgsql'
+            ? 'GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(return_time, CAST(? AS timestamp)) - leave_time)))'
+            : "MAX(0, CAST(strftime('%s', COALESCE(return_time, ?)) AS INTEGER) - CAST(strftime('%s', leave_time) AS INTEGER))";
     }
 }

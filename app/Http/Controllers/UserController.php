@@ -43,7 +43,7 @@ class UserController extends Controller
     /** Cambia el predio del que es responsable una cuenta MANAGE_PREMISE. */
     public function assignPremise(AssignUserPremiseRequest $request, User $user, PremiseManagerService $managers): JsonResponse
     {
-        $updated = $managers->moveToPremise($user, (int) $request->validated('premise_id'));
+        $updated = $managers->moveToPremise($user, (int) $request->validated('premise_id'), $request->user());
 
         return response()->json(['status' => 0, 'data' => $updated]);
     }
@@ -51,7 +51,7 @@ class UserController extends Controller
     /** Cambia o regenera la contraseña de una cuenta local de responsable. */
     public function updatePassword(UpdateUserPasswordRequest $request, User $user, PremiseManagerService $managers): JsonResponse
     {
-        $generatedPassword = $managers->changePassword($user, $request->validated('password'));
+        $generatedPassword = $managers->changePassword($user, $request->validated('password'), $request->user());
 
         return response()->json([
             'status' => 0,
@@ -81,7 +81,7 @@ class UserController extends Controller
             );
         }
 
-        $hadDevice = $devices->reset($user, $platform);
+        $hadDevice = $devices->reset($user, $platform, $request->user());
 
         return response()->json([
             'status' => 0,

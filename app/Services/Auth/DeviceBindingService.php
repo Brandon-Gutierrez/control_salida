@@ -5,6 +5,7 @@ namespace App\Services\Auth;
 use App\Models\User;
 use App\Models\UserDevice;
 use App\Repositories\UserActiveSessionRepository;
+use App\Services\Audit\AuditLogger;
 use App\Support\ClientPlatform;
 
 /** Vincula cada cuenta a un único dispositivo por aplicación (web / mobile). */
@@ -14,7 +15,10 @@ class DeviceBindingService
 
     public const MAX_ID_LENGTH = 255;
 
-    public function __construct(private UserActiveSessionRepository $sessions) {}
+    public function __construct(
+        private UserActiveSessionRepository $sessions,
+        private AuditLogger $audit,
+    ) {}
 
     public static function isValidDeviceId(mixed $deviceId): bool
     {
@@ -82,15 +86,22 @@ class DeviceBindingService
      * Quita el dispositivo autorizado y cierra las sesiones de esa aplicación,
      * para que la cuenta pueda vincular un dispositivo nuevo.
      *
+     * @param  User|null  $actor  Quien lo hizo desde el panel (null: comando de consola, p. ej. TI).
      * @return bool true si había un dispositivo vinculado.
      */
-    public function reset(User $user, string $platform): bool
+    public function reset(User $user, string $platform, ?User $actor = null): bool
     {
         $deleted = UserDevice::where('user_id', $user->user_id)
             ->where('platform', $platform)
             ->delete();
 
         $this->sessions->deleteForPlatform($user->user_id, $platform);
+
+        $this->audit->record(AuditLogger::DEVICE_RESET, $actor, $user, [
+            'platform' => $platform,
+            'had_device' => $deleted > 0,
+            'via' => $actor ? 'panel' : 'console',
+        ]);
 
         return $deleted > 0;
     }

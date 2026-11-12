@@ -16,7 +16,12 @@ Dockeriza el **backend Laravel**, la **web Flutter** y **PostgreSQL** (más **Re
                      │                  │      ┌──────────────┐
                      │                  ├─────►│ redis        │  volumen redisdata
                      └──────────────────┘      └──────────────┘
+                     ┌──────────────────┐
+                     │ scheduler        │  php artisan schedule:work (misma imagen que app)
+                     └──────────────────┘
 ```
+
+El servicio **`scheduler`** ejecuta las tareas programadas de Laravel (`routes/console.php`): la sincronización de motivos con Comteco a las **00:00 (hora de Bolivia) de lunes a viernes**, con reintentos a las 00:15 y 00:30 si falla. Debe haber **una sola instancia**. Sin él, los motivos solo se sincronizan con el botón manual del panel. Alternativa sin contenedor: un cron del servidor con `* * * * * docker compose exec -T app php artisan schedule:run`.
 
 Web y API comparten dominio: la web se compila con `API_BASE_URL` vacío y llama a `/api` en su propio origen (sin CORS). Solo `web` publica puertos; PostgreSQL y Redis no son accesibles desde fuera de la red de Docker.
 
@@ -114,6 +119,10 @@ docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > r
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"' < respaldo.sql
 ```
 
+## Respaldos
+
+El procedimiento de respaldo, restauración y prueba mensual está en [`RESPALDOS.md`](RESPALDOS.md). El historial de salidas no se puede borrar (claves foráneas `RESTRICT` y un trigger de PostgreSQL), pero eso **no sustituye** al respaldo.
+
 ## Puertos
 
 | Puerto host | Servicio | Variable |
@@ -131,5 +140,6 @@ Apunta su `.env` (`API=...`) a `https://<PUBLIC_HOST>`. Con el certificado autof
 ## Notas
 
 - `config/cors.php` ahora lee `CORS_ALLOWED_ORIGINS` (por defecto sigue siendo `http://localhost:65085`) y `config/services.php` lee `SUPERADMIN_ITEM`/`SUPERADMIN_NAME`; se añadió `SuperAdminSeeder` con su prueba. Son los únicos cambios de código del backend; el resto son los archivos de Docker.
-- La IP que el backend registra para cada sesión puede ser la de la puerta de enlace de Docker (Docker Desktop en Windows); en un servidor Linux llega la real.
+- La API confía en las cabeceras `X-Forwarded-For`/`-Proto` del gateway (`trustProxies('*')`): la IP real del cliente se usa en el límite de intentos de inicio de sesión (5 fallos por cuenta+IP y 20 por IP cada minuto) y se guarda en la sesión. El gateway debe reenviar esas cabeceras y la API **no debe publicarse directamente** (solo por el gateway).
+- Las migraciones se aplican solas al arrancar `app`. La de noviembre de 2026 cambia claves foráneas a `RESTRICT` y crea triggers; si la tabla `reason_premise` tuviera un mismo motivo repetido en un predio, la migración se detiene con un mensaje claro para corregirlo antes.
 - Cambiar `API_BASE_URL`, la versión de Flutter o el código de la web requiere reconstruir la imagen `web`.

@@ -15,6 +15,58 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# Variables de la API, compartidas por los servicios que corren el backend (app y scheduler).
+x-app-environment: &app-environment
+  APP_NAME: ${APP_NAME:-ControlSalida}
+  APP_ENV: production
+  APP_KEY: ${APP_KEY:?Define APP_KEY en .env}
+  APP_DEBUG: "false"
+  APP_URL: https://${PUBLIC_HOST:-localhost}
+  APP_TIMEZONE: America/La_Paz
+  APP_LOCALE: ${APP_LOCALE:-en}
+  APP_FALLBACK_LOCALE: ${APP_LOCALE:-en}
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: ${LOG_LEVEL:-warning}
+
+  DB_CONNECTION: pgsql
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_DATABASE: ${DB_DATABASE:-control_leaves}
+  DB_USERNAME: ${DB_USERNAME:-control}
+  DB_PASSWORD: ${DB_PASSWORD}
+
+  REDIS_CLIENT: predis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  SESSION_DRIVER: database
+  SESSION_LIFETIME: ${SESSION_LIFETIME:-5256000}
+  SESSION_SECURE_COOKIE: "true"
+  CACHE_STORE: database
+  QUEUE_CONNECTION: database
+
+  # Geocerca: radio al predio del QR (m) y peor precisión de GPS aceptada (m).
+  GEOFENCE_RADIUS_METERS: ${GEOFENCE_RADIUS_METERS:-50}
+  GEOFENCE_MAX_ACCURACY_METERS: ${GEOFENCE_MAX_ACCURACY_METERS:-30}
+
+  # La web y la API comparten dominio: Sanctum acepta el host público y no hace falta CORS.
+  SANCTUM_STATEFUL_DOMAINS: ${PUBLIC_HOST:-localhost}
+  CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOST:-localhost}
+
+  # Servicio externo (Comteco).
+  KEY_SOFTWARE: ${KEY_SOFTWARE:-}
+  API_LOGIN: ${API_LOGIN:-}
+  API_LOGINWITHCARNET: ${API_LOGINWITHCARNET:-}
+  API_GETEMPLOYEE: ${API_GETEMPLOYEE:-}
+  API_GETREASONS: ${API_GETREASONS:-}
+  API_GETCHECKOUT: ${API_GETCHECKOUT:-}
+  API_REGISTERCHECKOUT: ${API_REGISTERCHECKOUT:-}
+
+  # Administrador inicial (se identifica por su item del sistema externo).
+  SUPERADMIN_ITEM: ${SUPERADMIN_ITEM:-}
+  SUPERADMIN_NAME: ${SUPERADMIN_NAME:-}
+
 services:
   db:
     image: postgres:${POSTGRES_VERSION:-17}-alpine
@@ -64,58 +116,30 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
-      APP_NAME: ${APP_NAME:-ControlSalida}
-      APP_ENV: production
-      APP_KEY: ${APP_KEY:?Define APP_KEY en .env}
-      APP_DEBUG: "false"
-      APP_URL: https://${PUBLIC_HOST:-localhost}
-      APP_TIMEZONE: America/La_Paz
-      APP_LOCALE: ${APP_LOCALE:-en}
-      APP_FALLBACK_LOCALE: ${APP_LOCALE:-en}
-      LOG_CHANNEL: stderr
-      LOG_LEVEL: ${LOG_LEVEL:-warning}
-
-      DB_CONNECTION: pgsql
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_DATABASE: ${DB_DATABASE:-control_leaves}
-      DB_USERNAME: ${DB_USERNAME:-control}
-      DB_PASSWORD: ${DB_PASSWORD}
-
-      REDIS_CLIENT: predis
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-
-      SESSION_DRIVER: database
-      SESSION_LIFETIME: ${SESSION_LIFETIME:-5256000}
-      SESSION_SECURE_COOKIE: "true"
-      CACHE_STORE: database
-      QUEUE_CONNECTION: database
-
-      # La web y la API comparten dominio: Sanctum acepta el host público y no hace falta CORS.
-      SANCTUM_STATEFUL_DOMAINS: ${PUBLIC_HOST:-localhost}
-      CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOST:-localhost}
-
-      # Servicio externo (Comteco).
-      KEY_SOFTWARE: ${KEY_SOFTWARE:-}
-      API_LOGIN: ${API_LOGIN:-}
-      API_LOGINWITHCARNET: ${API_LOGINWITHCARNET:-}
-      API_GETEMPLOYEE: ${API_GETEMPLOYEE:-}
-      API_GETREASONS: ${API_GETREASONS:-}
-      API_GETCHECKOUT: ${API_GETCHECKOUT:-}
-      API_REGISTERCHECKOUT: ${API_REGISTERCHECKOUT:-}
-
-      # Administrador inicial (se identifica por su item del sistema externo).
-      SUPERADMIN_ITEM: ${SUPERADMIN_ITEM:-}
-      SUPERADMIN_NAME: ${SUPERADMIN_NAME:-}
+    environment: *app-environment
     healthcheck:
       test: ["CMD-SHELL", "test -f /tmp/ready"]
       interval: 5s
       timeout: 3s
       retries: 60
       start_period: 20s
+    logging: *default-logging
+
+  # Planificador de Laravel: ejecuta las tareas programadas (sincronización de
+  # motivos con Comteco a las 00:00 de lunes a viernes, hora de Bolivia). Debe
+  # haber UNA sola instancia; las tareas ya llevan onOneServer por seguridad.
+  scheduler:
+    image: control-salidas-api:prod
+    restart: unless-stopped
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      <<: *app-environment
+      # La API ya migró y sembró: el planificador solo ejecuta tareas.
+      RUN_MIGRATIONS: "false"
+      RUN_SEEDERS: "false"
     logging: *default-logging
 
   web:

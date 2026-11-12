@@ -98,7 +98,8 @@ class ManualEntryService
             );
         }
 
-        $this->leaves->register($person, $leaveTicket, (string) $this->premises->findNameById($premiseId), $reasonName);
+        // Sin ubicación a propósito: el responsable opera desde el predio asignado a su cuenta.
+        $this->leaves->register($person, $leaveTicket, (string) $this->premises->findNameById($premiseId), $reasonName, null);
     }
 
     private function premiseIdOf(User $manager): int

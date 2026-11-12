@@ -16,6 +16,8 @@ class LeaveController extends Controller
             $request->leaveTicket(),
             $request->validated('namePremise'),
             $request->validated('nameReason'),
+            // La ubicación ya la validó el middleware; se compara con el predio del comprobante.
+            $request->attributes->get('location'),
         );
 
         return response()->json([

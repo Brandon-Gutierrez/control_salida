@@ -2,20 +2,29 @@
 
 namespace Tests\Feature;
 
-use App\Http\Middleware\EnsureActiveSession;
-use App\Http\Middleware\EnsurePremiseLocation;
+use App\Exceptions\ApiException;
+use App\Http\Middleware\EnsureLocationProof;
+use App\Models\LeaveReason;
 use App\Models\Premise;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserActiveSession;
+use App\Services\Location\PremiseLocationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Concerns\SignsInWithDevice;
 use Tests\TestCase;
 
-/** Validación de ubicación (70 m) y gestión de predios con coordenadas y responsable. */
+/**
+ * Ubicación: la prueba enviada por el teléfono es válida (middleware) y la
+ * persona está a 50 m o menos del predio del QR o del comprobante (servicio).
+ * Más la gestión de predios con coordenadas y responsable.
+ */
 class PremiseLocationTest extends TestCase
 {
     use RefreshDatabase;
@@ -34,9 +43,9 @@ class PremiseLocationTest extends TestCase
         $this->premise = Premise::create(['name' => 'Prado', 'latitude' => self::LAT, 'longitude' => self::LNG]);
     }
 
-    private function runMiddleware(array $override = []): Response
+    private function payload(array $override = []): array
     {
-        $payload = array_merge([
+        return array_merge([
             'latitude' => self::LAT,
             'longitude' => self::LNG,
             'accuracy_m' => 8,
@@ -44,11 +53,14 @@ class PremiseLocationTest extends TestCase
             'is_mocked' => false,
             'vpn_detected' => false,
         ], $override);
+    }
 
-        $request = Request::create('/api/qr/scan', 'POST', $payload);
+    private function runMiddleware(array $override = []): Response
+    {
+        $request = Request::create('/api/qr/scan', 'POST', $this->payload($override));
         $request->headers->set('Accept', 'application/json');
 
-        return app(EnsurePremiseLocation::class)->handle($request, fn () => response()->json(['ok' => true]));
+        return app(EnsureLocationProof::class)->handle($request, fn () => response()->json(['ok' => true]));
     }
 
     /** 1 grado de latitud = 111.195 km. */
@@ -57,19 +69,39 @@ class PremiseLocationTest extends TestCase
         return self::LAT + $m / 111_195;
     }
 
-    public function test_dentro_del_radio_se_acepta(): void
+    private function assertLocation(array $override = [], ?Premise $premise = null): ?ApiException
     {
-        $this->assertSame(200, $this->runMiddleware(['latitude' => $this->metersNorth(25)])->getStatusCode());
+        $location = [
+            'latitude' => $override['latitude'] ?? self::LAT,
+            'longitude' => $override['longitude'] ?? self::LNG,
+            'accuracy_m' => $override['accuracy_m'] ?? 8,
+        ];
+
+        try {
+            app(PremiseLocationService::class)->assertWithinPremise($location, ($premise ?? $this->premise)->premise_id);
+        } catch (ApiException $exception) {
+            return $exception;
+        }
+
+        return null;
     }
 
-    public function test_fuera_del_radio_se_rechaza(): void
+    private function codeOf(?ApiException $exception): ?string
     {
-        $this->assertSame(403, $this->runMiddleware(['latitude' => $this->metersNorth(120)])->getStatusCode());
+        return $exception ? json_decode($exception->render()->getContent(), true)['code'] : null;
     }
 
-    public function test_la_imprecision_reportada_cuenta_contra_el_radio(): void
+    // ------------------------------------------------ prueba de ubicación (middleware)
+
+    public function test_una_prueba_valida_pasa_y_queda_en_la_peticion(): void
     {
-        $this->assertSame(403, $this->runMiddleware(['latitude' => $this->metersNorth(45), 'accuracy_m' => 30])->getStatusCode());
+        $this->assertSame(200, $this->runMiddleware()->getStatusCode());
+    }
+
+    public function test_el_middleware_ya_no_decide_la_distancia(): void
+    {
+        // Lejos de todo predio: la distancia la comprueba el servicio, con el predio del QR.
+        $this->assertSame(200, $this->runMiddleware(['latitude' => $this->metersNorth(5000)])->getStatusCode());
     }
 
     public function test_gps_falso_se_rechaza_aunque_este_en_el_predio(): void
@@ -90,6 +122,11 @@ class PremiseLocationTest extends TestCase
         $this->assertSame(403, $this->runMiddleware(['location_timestamp' => now()->subMinutes(10)->toIso8601String()])->getStatusCode());
     }
 
+    public function test_ubicacion_del_futuro_se_rechaza(): void
+    {
+        $this->assertSame(403, $this->runMiddleware(['location_timestamp' => now()->addMinutes(5)->toIso8601String()])->getStatusCode());
+    }
+
     public function test_precision_cero_se_rechaza(): void
     {
         $this->expectException(ValidationException::class);
@@ -103,7 +140,118 @@ class PremiseLocationTest extends TestCase
             'latitude' => self::LAT, 'longitude' => self::LNG, 'accuracy_m' => 5,
             'location_timestamp' => now()->toIso8601String(),
         ]);
-        app(EnsurePremiseLocation::class)->handle($request, fn () => response()->json([]));
+        app(EnsureLocationProof::class)->handle($request, fn () => response()->json([]));
+    }
+
+    // ------------------------------------------------ distancia al predio (50 m)
+
+    public function test_el_radio_es_de_50_metros_y_la_precision_maxima_de_30(): void
+    {
+        $service = app(PremiseLocationService::class);
+        $this->assertSame(50, $service->radiusMeters());
+        $this->assertSame(30, $service->maxAccuracyMeters());
+    }
+
+    public function test_dentro_de_los_50_metros_se_acepta(): void
+    {
+        $this->assertNull($this->assertLocation(['latitude' => $this->metersNorth(25)]));
+        $this->assertNull($this->assertLocation(['latitude' => $this->metersNorth(48)]));
+    }
+
+    public function test_fuera_de_los_50_metros_se_rechaza(): void
+    {
+        $error = $this->assertLocation(['latitude' => $this->metersNorth(60)]);
+
+        $this->assertSame('OUTSIDE_PREMISE_RADIUS', $this->codeOf($error));
+        $this->assertStringContainsString('50 m o menos del predio Prado', $error->getMessage());
+    }
+
+    public function test_con_buena_precision_basta_con_estar_a_50_metros_aunque_la_precision_sea_de_30(): void
+    {
+        // La regla ya no resta la precisión del radio: 45 m con GPS de 30 m es válido.
+        $this->assertNull($this->assertLocation(['latitude' => $this->metersNorth(45), 'accuracy_m' => 30]));
+    }
+
+    public function test_un_gps_demasiado_impreciso_se_rechaza_aunque_este_en_el_predio(): void
+    {
+        $error = $this->assertLocation(['accuracy_m' => 31]);
+
+        $this->assertSame('LOCATION_ACCURACY_TOO_LOW', $this->codeOf($error));
+        $this->assertStringContainsString('máximo 30 m', $error->getMessage());
+    }
+
+    public function test_un_predio_sin_coordenadas_no_acepta_escaneos(): void
+    {
+        $sin = Premise::create(['name' => 'Sin mapa']);
+
+        $this->assertSame('PREMISE_WITHOUT_LOCATION', $this->codeOf($this->assertLocation([], $sin)));
+    }
+
+    public function test_el_radio_se_puede_configurar(): void
+    {
+        config(['geofence.radius_m' => 100]);
+
+        $this->assertNull($this->assertLocation(['latitude' => $this->metersNorth(90)]));
+        $this->assertSame('OUTSIDE_PREMISE_RADIUS', $this->codeOf($this->assertLocation(['latitude' => $this->metersNorth(110)])));
+    }
+
+    // ------------------------------- la distancia es al predio del QR, no a cualquiera
+
+    private function employee(): User
+    {
+        return User::create([
+            'external_identifier' => 'emp', 'name' => 'Juan', 'item' => 2,
+            'role_id' => Role::where('name', Role::EMPLOYEE)->value('role_id'),
+        ]);
+    }
+
+    public function test_cerca_de_otro_predio_no_sirve_para_el_qr_de_este(): void
+    {
+        // La persona está junto al predio Norte pero escanea el QR de Prado.
+        $norte = Premise::create(['name' => 'Norte', 'latitude' => -16.4, 'longitude' => -68.2]);
+        Redis::shouldReceive('get')->with('Prado+token')->andReturn((string) $this->premise->premise_id);
+
+        $this->signIn($this->employee(), 'mobile')
+            ->postJson('/api/qr/scan', ['qrData' => 'Prado+token'] + $this->payload([
+                'latitude' => $norte->latitude, 'longitude' => $norte->longitude,
+            ]))
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'OUTSIDE_PREMISE_RADIUS');
+    }
+
+    public function test_al_confirmar_la_ubicacion_debe_seguir_en_el_predio_del_comprobante(): void
+    {
+        $employee = $this->employee();
+        $norte = Premise::create(['name' => 'Norte', 'latitude' => -16.4, 'longitude' => -68.2]);
+        $reason = LeaveReason::create(['name' => 'Trámite', 'code' => 'T']);
+        DB::table('reason_premise')->insert(['reason_id' => $reason->reason_id, 'premise_id' => $this->premise->premise_id]);
+        Redis::shouldReceive('get')->with('leave-ticket:ticket-1')->andReturn(json_encode([
+            'user_id' => $employee->user_id, 'premise_id' => $this->premise->premise_id,
+        ]));
+        Http::fake();
+
+        // Escaneó en Prado, pero al confirmar ya está lejos (en el predio Norte).
+        $this->signIn($employee, 'mobile')
+            ->postJson('/api/leaves', [
+                'leaveTicket' => 'ticket-1', 'namePremise' => 'Prado', 'nameReason' => 'Trámite',
+            ] + $this->payload(['latitude' => $norte->latitude, 'longitude' => $norte->longitude]))
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'OUTSIDE_PREMISE_RADIUS');
+
+        $this->assertDatabaseCount('records', 0);
+        Http::assertNothingSent();
+    }
+
+    // ------------------------------------ el radio llega a la web de administración
+
+    public function test_la_lista_de_predios_incluye_el_radio_de_la_geocerca(): void
+    {
+        $this->admin()->getJson('/api/admin/premises')
+            ->assertOk()
+            ->assertJsonPath('geofence_radius_m', 50);
+
+        config(['geofence.radius_m' => 80]);
+        $this->admin()->getJson('/api/admin/premises')->assertJsonPath('geofence_radius_m', 80);
     }
 
     // ---------------------------------------------------- gestión de predios

@@ -8,7 +8,9 @@ use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\ClientPlatform;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -179,5 +181,83 @@ class LeaveStatsTest extends TestCase
 
         $this->signIn($this->employee, ClientPlatform::MOBILE)->getJson('/api/auth/me')
             ->assertJsonPath('user.photo_url', null);
+    }
+
+    // ---------------------------------------- el cálculo en SQL coincide con el de PHP
+
+    /** El cálculo de siempre (traer las filas y sumar en PHP), como referencia. */
+    private function expected(Collection $records, Carbon $now, Carbon $start, ?Carbon $end = null): array
+    {
+        $startOfToday = $now->copy()->startOfDay();
+        $kept = $records
+            ->filter(fn ($r) => Carbon::parse($r->leave_time)->gte($start)
+                && ($end === null || Carbon::parse($r->leave_time)->lte($end)))
+            ->reject(fn ($r) => $r->return_time === null && Carbon::parse($r->leave_time)->lt($startOfToday));
+
+        return [
+            'exits' => $kept->count(),
+            'minutes' => (int) round($kept->sum(function ($r) use ($now) {
+                $finish = $r->return_time ? Carbon::parse($r->return_time) : $now;
+
+                return max(0, Carbon::parse($r->leave_time)->diffInSeconds($finish, false)) / 60;
+            })),
+        ];
+    }
+
+    public function test_los_totales_en_sql_coinciden_con_el_calculo_en_php_con_muchas_salidas(): void
+    {
+        $now = Carbon::create(2025, 10, 15, 14, 7, 31, config('app.timezone'));
+        $this->travelTo($now);
+        mt_srand(2025);
+
+        $other = User::create(['external_identifier' => 'e2', 'name' => 'Otra', 'item' => 9, 'role_id' => $this->employee->role_id]);
+        $rows = [];
+        for ($i = 0; $i < 400; $i++) {
+            $leave = $now->copy()->subSeconds(mt_rand(0, 40 * 86_400));
+            $open = mt_rand(1, 100) <= 15;
+            $return = $open ? null : $leave->copy()->addSeconds(mt_rand(0, 4 * 3_600));
+            if ($return && $return->gt($now)) {
+                $return = $now->copy();
+            }
+            $rows[] = [
+                'user_id' => $i % 7 === 0 ? $other->user_id : $this->employee->user_id,
+                'reason_premise_id' => $this->reasonPremiseId,
+                'leave_time' => $leave->toDateTimeString(),
+                'return_time' => $return?->toDateTimeString(),
+            ];
+        }
+        DB::table('records')->insert($rows);
+        $mine = Record::where('user_id', $this->employee->user_id)->get();
+        $service = app(\App\Services\Leave\LeaveStatsService::class);
+
+        $stats = $service->forUser($this->employee);
+        foreach (['day' => $now->copy()->startOfDay(), 'week' => $now->copy()->startOfWeek(Carbon::MONDAY), 'month' => $now->copy()->startOfMonth()] as $name => $start) {
+            $expected = $this->expected($mine, $now, $start);
+            $this->assertSame($expected['exits'], $stats[$name]['exits'], "salidas de {$name}");
+            $this->assertSame($expected['minutes'], $stats[$name]['minutes'], "minutos de {$name}");
+        }
+
+        foreach ([['2025-09-20', '2025-10-01'], ['2025-10-10', '2025-10-15'], ['2025-10-15', '2025-10-15'], ['2025-09-01', '2025-10-31']] as [$from, $to]) {
+            $range = $service->forRange($this->employee, Carbon::parse($from), Carbon::parse($to));
+            $expected = $this->expected($mine, $now, Carbon::parse($from)->startOfDay(), Carbon::parse($to)->endOfDay());
+            $this->assertSame($expected['exits'], $range['exits'], "salidas de {$from} a {$to}");
+            $this->assertSame($expected['minutes'], $range['minutes'], "minutos de {$from} a {$to}");
+        }
+
+        $this->assertGreaterThan(50, $stats['month']['exits'], 'la muestra debe ser grande');
+    }
+
+    public function test_la_consulta_de_estadisticas_usa_los_indices_de_usuario_y_fecha(): void
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            $this->markTestSkipped('EXPLAIN QUERY PLAN es de SQLite; el plan de PostgreSQL se revisa con datos reales.');
+        }
+
+        $plan = collect(DB::select(
+            'EXPLAIN QUERY PLAN SELECT COUNT(*) FROM records WHERE user_id = ? AND leave_time >= ?',
+            [$this->employee->user_id, '2025-10-01 00:00:00'],
+        ))->pluck('detail')->implode(' ');
+
+        $this->assertStringContainsString('records_user_leave_time_idx', $plan);
     }
 }

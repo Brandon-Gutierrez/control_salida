@@ -4,7 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/** Contenido leído del QR de un predio. La ubicación se valida en el middleware EnsurePremiseLocation. */
+/** Contenido leído del QR de un predio. La prueba de ubicación la valida el middleware EnsureLocationProof. */
 class ScanQrRequest extends FormRequest
 {
     public function authorize(): bool

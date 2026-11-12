@@ -30,6 +30,7 @@ class AuthController extends Controller
             $request->validated('password'),
             $platform,
             $request->header('DeviceId'),
+            $request->ip(),
         );
 
         $this->openSession($request, $user, $platform);

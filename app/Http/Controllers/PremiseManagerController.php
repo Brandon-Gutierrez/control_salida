@@ -11,7 +11,7 @@ class PremiseManagerController extends Controller
     /** Crea una cuenta local responsable de un único predio. */
     public function store(CreatePremiseManagerRequest $request, PremiseManagerService $managers): JsonResponse
     {
-        [$user, $generatedPassword] = $managers->create($request->validated());
+        [$user, $generatedPassword] = $managers->create($request->validated(), $request->user());
 
         return response()->json([
             'status' => 0,

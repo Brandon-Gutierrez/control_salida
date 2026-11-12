@@ -4,7 +4,9 @@ namespace App\Repositories;
 
 use App\Models\LeaveReason;
 use App\Models\Premise;
+use App\Models\ReasonPremise;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 class PremiseRepository
 {
@@ -42,11 +44,38 @@ class PremiseRepository
             ->get();
     }
 
-    /** Reemplaza los motivos del predio por los indicados (por nombre). */
+    /**
+     * Reemplaza los motivos del predio por los indicados (por nombre).
+     *
+     * Las relaciones motivo-predio nunca se borran: las salidas registradas
+     * apuntan a ellas. Un motivo retirado se marca con `deleted_at` y, si se
+     * vuelve a habilitar, se restaura la misma fila.
+     */
     public function syncReasonsByName(Premise $premise, array $reasonNames): void
     {
-        $reasonIds = LeaveReason::whereIn('name', $reasonNames)->pluck('reason_id');
-        $premise->reasons()->sync($reasonIds);
+        $wanted = LeaveReason::whereIn('name', $reasonNames)->pluck('reason_id');
+
+        DB::transaction(function () use ($premise, $wanted) {
+            $existing = ReasonPremise::withTrashed()
+                ->where('premise_id', $premise->premise_id)
+                ->get()
+                ->keyBy('reason_id');
+
+            foreach ($existing as $reasonId => $relation) {
+                $keep = $wanted->contains($reasonId);
+
+                if ($keep && $relation->trashed()) {
+                    $relation->restore();
+                } elseif (! $keep && ! $relation->trashed()) {
+                    $relation->delete();
+                }
+            }
+
+            foreach ($wanted->diff($existing->keys()) as $reasonId) {
+                ReasonPremise::create(['reason_id' => $reasonId, 'premise_id' => $premise->premise_id]);
+            }
+        });
+
         $premise->unsetRelation('reasons');
     }
 }

@@ -6,10 +6,15 @@ use App\Exceptions\ApiException;
 use App\Models\User;
 use App\Repositories\PremiseRepository;
 use App\Repositories\RecordRepository;
+use App\Services\Audit\AuditLogger;
+use App\Services\External\CheckoutStatus;
 use App\Services\External\EmployeeIdentityService;
 use App\Services\External\ExternalApiService;
+use App\Services\External\RegistrationOutcome;
+use App\Services\Leave\ConfirmedOperationRecorder;
 use App\Services\Leave\LeaveLimitService;
 use App\Services\Leave\LeaveTicketService;
+use App\Services\Location\PremiseLocationService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
@@ -32,26 +37,37 @@ class QrScanService
         private LeaveLimitService $limits,
         private RecordRepository $records,
         private PremiseRepository $premises,
+        private ConfirmedOperationRecorder $recorder,
+        private AuditLogger $audit,
+        private PremiseLocationService $locations,
     ) {}
 
     /**
+     * @param  array{latitude: float, longitude: float, accuracy_m: float}  $location  Prueba de ubicación ya validada.
      * @return array<string, mixed> Cuerpo de la respuesta (`action`: showReasons | showHome).
      *
      * @throws ApiException
      */
-    public function scan(User $user, string $qrData): array
+    public function scan(User $user, string $qrData, array $location): array
     {
         $qrData = trim($qrData);
         if ($qrData === '') {
             throw ApiException::failure(422, 'No se recibió contenido del código QR.', 'QR_EMPTY', false);
         }
 
-        return $this->scanAtPremise($user, $this->premiseIdOf($user, $qrData));
+        $premiseId = $this->premiseIdOf($user, $qrData);
+
+        // Debe estar cerca del predio de ESTE QR, no de cualquier predio.
+        $this->locations->assertWithinPremise($location, $premiseId);
+
+        return $this->scanAtPremise($user, $premiseId);
     }
 
     /**
      * Lo que ocurre cuando una persona se presenta en un predio, sea por QR o
      * por ingreso manual: salida (comprobante para elegir motivo) o retorno.
+     * No comprueba la ubicación: el QR la comprueba en `scan` y el ingreso
+     * manual lo opera el responsable desde el propio predio.
      *
      * @return array<string, mixed>
      *
@@ -61,15 +77,21 @@ class QrScanService
     {
         $this->employees->assertIdentified($user, self::CONTEXT);
 
-        $checkout = $this->fetchCheckout($user);
+        $status = CheckoutStatus::fromResponse($this->fetchCheckout($user));
 
-        // Si no hay salida abierta hoy, se muestran los motivos.
-        $checkoutError = $checkout->json('error');
-        if (is_numeric($checkoutError) && (float) $checkoutError === -1.0 && empty($checkout->json('data'))) {
-            return $this->startLeave($user, $premiseId);
+        if ($status->isInvalid()) {
+            Log::warning('Respuesta no reconocida del servicio de salidas durante escaneo QR.', [
+                'user_id' => $user->user_id,
+            ]);
+
+            throw ApiException::temporaryFailure('CHECKOUT_RESPONSE_INVALID');
         }
 
-        return $this->registerReturn($user, $premiseId, $checkout);
+        // Con una salida abierta se registra el retorno; si no (nunca salió o
+        // ya volvió), se muestran los motivos y Comteco decide si acepta la salida.
+        return $status->hasOpenLeave()
+            ? $this->registerReturn($user, $premiseId, $status)
+            : $this->startLeave($user, $premiseId);
     }
 
     /** Predio del QR escaneado; falla si el QR venció o Redis no responde. */
@@ -146,18 +168,21 @@ class QrScanService
         ];
     }
 
-    private function registerReturn(User $user, int $premiseId, Response $checkout): array
+    private function registerReturn(User $user, int $premiseId, CheckoutStatus $status): array
     {
-        $checkoutData = $checkout->json('data');
-        if (! is_array($checkoutData) || empty($checkoutData[0]['id_solicitud'])) {
-            Log::warning('Respuesta no reconocida del servicio de salidas durante escaneo QR.', [
-                'user_id' => $user->user_id,
-            ]);
-
-            throw ApiException::temporaryFailure('CHECKOUT_RESPONSE_INVALID');
-        }
-
         if (! $this->records->isOpenLeaveFromPremise($user->user_id, $premiseId)) {
+            // Comteco dice que está fuera pero aquí no hay ninguna salida abierta:
+            // la salida no se hizo desde este sistema. Se deja constancia para revisarla.
+            if (! $this->records->hasOpenLeave($user->user_id)) {
+                $this->audit->record(AuditLogger::FOREIGN_OPEN_LEAVE, null, $user, [
+                    'premise_id' => $premiseId,
+                    'premise' => $this->premises->findNameById($premiseId),
+                    'request_id' => $status->requestId(),
+                    'reason_code' => $status->reasonCode(),
+                    'left_at' => $status->leftAt()?->toDateTimeString(),
+                ]);
+            }
+
             throw ApiException::failure(
                 403,
                 'El predio de retorno es diferente al predio de salida',
@@ -165,16 +190,24 @@ class QrScanService
             );
         }
 
+        $premiseName = $this->premises->findNameById($premiseId) ?? '';
+
         try {
             $registered = $this->api->fast()->registerCheckout([
                 'in_item' => $user->item,
-                'in_id_solicitud' => $checkoutData[0]['id_solicitud'],
-                'in_predio' => ExternalApiService::premiseLabel($this->premises->findNameById($premiseId) ?? ''),
+                'in_id_solicitud' => $status->requestId(),
+                'in_predio' => ExternalApiService::premiseLabel($premiseName),
             ]);
         } catch (ConnectionException $exception) {
             Log::warning('No se pudo confirmar el retorno en el servicio externo.', [
                 'user_id' => $user->user_id,
                 'exception' => $exception::class,
+            ]);
+            // Resultado incierto: no se reenvía solo; queda para revisión manual.
+            $this->audit->record(AuditLogger::RETURN_RESULT_UNKNOWN, null, $user, [
+                'premise_id' => $premiseId,
+                'premise' => $premiseName,
+                'request_id' => $status->requestId(),
             ]);
 
             throw ApiException::temporaryFailure('RETURN_RESULT_UNKNOWN', false);
@@ -189,6 +222,22 @@ class QrScanService
             throw ApiException::fromFailedResponse($registered, 'RETURN_REGISTRATION_FAILED');
         }
 
+        // El contenido de la respuesta también puede rechazar (error distinto de 0).
+        $outcome = RegistrationOutcome::fromResponse($registered);
+        if ($outcome->rejected()) {
+            Log::warning('El servicio externo no aceptó el retorno.', [
+                'user_id' => $user->user_id,
+                'message' => $outcome->message(),
+            ]);
+
+            throw ApiException::failure(
+                422,
+                $outcome->message() ?? 'El sistema externo no aceptó el retorno.',
+                'RETURN_REJECTED_BY_EXTERNAL',
+                false,
+            );
+        }
+
         // Cierra el registro local (usado para mostrar el motivo de la
         // última salida en el resumen del usuario).
         // Solo se cierra la última salida abierta; las anteriores sin retorno se ignoran.
@@ -200,7 +249,24 @@ class QrScanService
             ]);
         }
 
-        if ($this->records->registerReturn($user->user_id, $returnedAt) !== 1) {
+        // Comteco ya aceptó el retorno: si falla la escritura local se reintenta
+        // y, si sigue fallando, queda en la bitácora (nunca se reenvía a Comteco).
+        $closed = null;
+        $saved = $this->recorder->persist(
+            AuditLogger::RETURN_LOCAL_WRITE_FAILED,
+            $user,
+            [
+                'premise_id' => $premiseId,
+                'premise' => $premiseName,
+                'request_id' => $status->requestId(),
+                'returned_at' => $returnedAt?->toDateTimeString(),
+            ],
+            function () use ($user, $returnedAt, &$closed) {
+                $closed = $this->records->registerReturn($user->user_id, $returnedAt);
+            },
+        );
+
+        if ($saved && $closed !== 1) {
             Log::warning('El retorno se registró en el servicio externo pero no había una salida local abierta.', [
                 'user_id' => $user->user_id,
             ]);

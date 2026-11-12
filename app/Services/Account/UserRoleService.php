@@ -7,6 +7,8 @@ use App\Models\Role;
 use App\Models\User;
 use App\Repositories\RoleRepository;
 use App\Repositories\UserActiveSessionRepository;
+use App\Models\Premise;
+use App\Services\Audit\AuditLogger;
 use App\Services\Premise\PremiseManagerService;
 
 /** Cambio de rol de una cuenta (p. ej. otorgar o quitar permisos de ADMIN). */
@@ -16,6 +18,7 @@ class UserRoleService
         private RoleRepository $roles,
         private PremiseManagerService $premiseManagers,
         private UserActiveSessionRepository $sessions,
+        private AuditLogger $audit,
     ) {}
 
     /**
@@ -55,7 +58,17 @@ class UserRoleService
             $this->premiseManagers->assertPremiseIsFree((int) $managedPremiseId, $user->user_id);
         }
 
+        $fromRole = $user->role?->name;
+        $fromPremise = $user->premise_id ? Premise::whereKey($user->premise_id)->value('name') : null;
+
         $user->update(['role_id' => $newRole->role_id, 'premise_id' => $managedPremiseId]);
+
+        $this->audit->record(AuditLogger::ROLE_CHANGED, $actor, $user, [
+            'from' => $fromRole,
+            'to' => $newRole->name,
+            'premise_from' => $fromPremise,
+            'premise_to' => $managedPremiseId ? Premise::whereKey($managedPremiseId)->value('name') : null,
+        ]);
 
         // Los permisos cambian de raíz: nunca queda una pantalla vieja abierta.
         $this->sessions->deleteAllForUser($user->user_id);

@@ -204,6 +204,7 @@ class PremiseManagerTest extends TestCase
             ['GET', '/api/admin/roles'],
             ['GET', '/api/admin/reasons'],
             ['POST', '/api/admin/reasons/sync'],
+            ['GET', '/api/admin/reasons/catalog'],
             ['PUT', '/api/admin/users/' . $manager->user_id . '/role'],
             ['PUT', '/api/admin/users/' . $manager->user_id . '/premise'],
             ['POST', '/api/admin/users/premise-managers'],
