@@ -30,18 +30,12 @@ class SuperAdminSeederTest extends TestCase
         $this->assertSame(Role::ADMIN, $admin->role->name);
     }
 
-    public function test_promotes_an_existing_account_with_the_same_item(): void
+    public function test_promotes_an_existing_account_when_there_is_no_admin(): void
     {
-        config(['services.super_admin' => ['item' => '777', 'name' => null]]);
+        config(['services.super_admin' => ['item' => null, 'name' => null]]);
         $this->seed(DatabaseSeeder::class);
 
-        $employee = Role::where('name', Role::EMPLOYEE)->firstOrFail();
-        $user = User::create([
-            'external_identifier' => 'token-1',
-            'name' => 'Persona',
-            'item' => 888,
-            'role_id' => $employee->role_id,
-        ]);
+        $user = $this->employee(888);
 
         config(['services.super_admin' => ['item' => '888', 'name' => 'Otro']]);
         $this->seed(DatabaseSeeder::class);
@@ -52,6 +46,22 @@ class SuperAdminSeederTest extends TestCase
         $this->assertSame(1, User::where('item', 888)->count());
     }
 
+    public function test_does_not_undo_a_demotion_while_another_admin_exists(): void
+    {
+        config(['services.super_admin' => ['item' => '888', 'name' => 'Inicial']]);
+        $this->seed(DatabaseSeeder::class);
+
+        $admin = Role::where('name', Role::ADMIN)->firstOrFail();
+        $employee = Role::where('name', Role::EMPLOYEE)->firstOrFail();
+        $this->employee(999)->update(['role_id' => $admin->role_id]);
+        User::where('item', 888)->update(['role_id' => $employee->role_id]);
+
+        // Un reinicio del contenedor vuelve a sembrar.
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertSame(Role::EMPLOYEE, User::where('item', 888)->sole()->role->name);
+    }
+
     public function test_skips_the_admin_when_no_item_is_configured(): void
     {
         config(['services.super_admin' => ['item' => null, 'name' => null]]);
@@ -60,5 +70,15 @@ class SuperAdminSeederTest extends TestCase
 
         $this->assertSame(0, User::count());
         $this->assertTrue(Role::where('name', Role::ADMIN)->exists());
+    }
+
+    private function employee(int $item): User
+    {
+        return User::create([
+            'external_identifier' => 'token-'.$item,
+            'name' => 'Persona',
+            'item' => $item,
+            'role_id' => Role::where('name', Role::EMPLOYEE)->firstOrFail()->role_id,
+        ]);
     }
 }

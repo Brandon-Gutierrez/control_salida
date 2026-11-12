@@ -38,6 +38,7 @@ Esta carpeta (`docker/`) vive en el repositorio del **backend**; no hay un terce
 | `.env` / `.env.example` | Variables. `.env` contiene secretos y no se versiona (ver `.gitignore` de esta carpeta). |
 | `nginx/` | Puerta de entrada: `gateway.conf.template` (producción, HTTPS), `gateway.dev.conf.template` (desarrollo) y `fastcgi-laravel.conf` (reenvío a php-fpm). |
 | `certs/` | Aquí van `fullchain.pem` y `privkey.pem`. |
+| `acme/` | Desafíos de Let's Encrypt (los escribe `certbot --webroot`). |
 | `entrypoint.sh` | Arranque de la API: espera la BD, migra y siembra. |
 
 ### Qué vive en cada repositorio
@@ -73,7 +74,8 @@ Requisito: Docker con Compose v2.24 o superior.
    - `BACKEND_PATH` y `WEB_PATH`: ya apuntan al backend (`..`) y a la web clonada junto a él; cámbialos solo si tu disposición es distinta.
    - `SUPERADMIN_ITEM` y `SUPERADMIN_NAME`: tu item corporativo y nombre.
    - `KEY_SOFTWARE` y las `API_*` de Comteco.
-2. (Opcional) Copia tu certificado a `certs/fullchain.pem` y `certs/privkey.pem`. Si faltan, se genera uno **autofirmado** en el primer arranque: sirve para probar, pero los navegadores y la app móvil lo rechazarán.
+2. Certificado: copia el tuyo a `certs/fullchain.pem` y `certs/privkey.pem`, u obtén uno de Let's Encrypt (ver [Certificados](#certificados)). Si faltan, se genera uno **autofirmado** en el primer arranque: sirve para probar, pero los navegadores y la app móvil lo rechazarán.
+   - Si hay un proxy de la empresa delante del servidor, pon su IP en `TRUSTED_PROXY` para que se registre la IP real de cada persona.
 3. Levanta todo:
 
    ```bash
@@ -86,7 +88,19 @@ El contenedor `app` ejecuta al arrancar `migrate` y `db:seed` (roles + administr
 
 ### Super administrador
 
-El login de ADMIN y EMPLOYEE siempre se valida contra Comteco; no hay contraseña local para el administrador. El seeder crea (o promueve a ADMIN) la cuenta con ese `item`; al iniciar sesión por primera vez con Comteco, la cuenta se completa sin duplicarse. Si `SUPERADMIN_ITEM` está vacío no se siembra ningún administrador.
+El login de ADMIN y EMPLOYEE siempre se valida contra Comteco; no hay contraseña local para el administrador. El seeder crea la cuenta ADMIN con ese `item`; al iniciar sesión por primera vez con Comteco, la cuenta se completa sin duplicarse. Si la cuenta ya existía con otro rol, solo se promueve cuando el sistema no tiene ningún ADMIN: así un cambio de rol hecho desde el panel no se deshace en cada reinicio, pero el sistema nunca queda sin administrador. Si `SUPERADMIN_ITEM` está vacío no se siembra ningún administrador.
+
+## Certificados
+
+Con un dominio público, Let's Encrypt puede emitir y renovar el certificado gratis. El gateway sirve `/.well-known/acme-challenge/` desde `acme/` (el resto del puerto 80 redirige a HTTPS). En el servidor, con `certbot` instalado y el sistema ya levantado:
+
+```bash
+cd /opt/control/backend/docker
+sudo certbot certonly --webroot -w "$PWD/acme" -d midominio.com \
+  --deploy-hook "cp -L /etc/letsencrypt/live/midominio.com/fullchain.pem /etc/letsencrypt/live/midominio.com/privkey.pem $PWD/certs/ && docker compose -f $PWD/docker-compose.yml exec -T web nginx -s reload"
+```
+
+El `--deploy-hook` copia los archivos (no enlaces: `certs/` se monta en el contenedor) y recarga nginx; certbot lo repite solo en cada renovación. Si ya se había generado el autofirmado, el primer `certbot` lo reemplaza.
 
 ## Desarrollo
 
@@ -100,7 +114,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 - El código del backend se monta desde `BACKEND_PATH`: los cambios se ven al instante. `vendor/` y `storage/` viven en volúmenes de Docker; el `.env` de Laragon no se usa.
 - PostgreSQL y Redis solo en `127.0.0.1:15432` y `127.0.0.1:16379`.
 - Web con recarga en caliente: `flutter run -d chrome --web-port 65085 --dart-define=API_BASE_URL=http://localhost:8080` en tu equipo. Este modo ya incluye `localhost:65085` en CORS y Sanctum.
-- Las pruebas del backend: `docker compose exec app php artisan test`.
+- Las pruebas del backend: `docker compose exec app php artisan test`. Usan SQLite en memoria aunque el contenedor apunte a PostgreSQL (`phpunit.xml` fija el entorno de pruebas): no tocan la base de desarrollo.
 - Para reflejar cambios de la web en el contenedor: `docker compose ... up -d --build web`.
 
 ## Datos y persistencia
@@ -140,6 +154,7 @@ Apunta su `.env` (`API=...`) a `https://<PUBLIC_HOST>`. Con el certificado autof
 ## Notas
 
 - `config/cors.php` ahora lee `CORS_ALLOWED_ORIGINS` (por defecto sigue siendo `http://localhost:65085`) y `config/services.php` lee `SUPERADMIN_ITEM`/`SUPERADMIN_NAME`; se añadió `SuperAdminSeeder` con su prueba. Son los únicos cambios de código del backend; el resto son los archivos de Docker.
-- La API confía en las cabeceras `X-Forwarded-For`/`-Proto` del gateway (`trustProxies('*')`): la IP real del cliente se usa en el límite de intentos de inicio de sesión (5 fallos por cuenta+IP y 20 por IP cada minuto) y se guarda en la sesión. El gateway debe reenviar esas cabeceras y la API **no debe publicarse directamente** (solo por el gateway).
+- La API confía en las cabeceras `X-Forwarded-For`/`-Proto` (`trustProxies('*')`): la IP del cliente se usa en el límite de intentos de inicio de sesión (5 fallos por cuenta+IP y 20 por IP cada minuto), en la auditoría y en la sesión. Por eso esas cabeceras **las fija el gateway** (`nginx/fastcgi-laravel.conf`) y descarta las que mande el cliente; solo acepta el `X-Forwarded-For` del proxy indicado en `TRUSTED_PROXY`. La API **no debe publicarse directamente** (solo por el gateway).
+- `phpunit.xml` fija el entorno de pruebas con `<server>` y `<env force="true">`, para que las pruebas dentro del contenedor no usen la base real.
 - Las migraciones se aplican solas al arrancar `app`. La de noviembre de 2026 cambia claves foráneas a `RESTRICT` y crea triggers; si la tabla `reason_premise` tuviera un mismo motivo repetido en un predio, la migración se detiene con un mensaje claro para corregirlo antes.
 - Cambiar `API_BASE_URL`, la versión de Flutter o el código de la web requiere reconstruir la imagen `web`.

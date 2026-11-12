@@ -47,12 +47,12 @@ Desde la carpeta `docker`:
 docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > respaldo_$(date +%F).dump
 ```
 
-Ejemplo de script diario con rotación (`/opt/control-salidas/respaldar.sh`, ejecutado por `cron` a las 02:00):
+Ejemplo de script diario con rotación (`/opt/control/respaldar.sh`, ejecutado por `cron` a las 02:00):
 
 ```bash
 #!/bin/sh
 set -eu
-cd /opt/control-salidas/docker                      # carpeta del docker-compose
+cd /opt/control/backend/docker                    # carpeta del docker-compose
 DEST=/var/respaldos/control-salidas                  # carpeta con permisos restringidos (chmod 700)
 mkdir -p "$DEST/diarios" "$DEST/mensuales"
 FILE="$DEST/diarios/respaldo_$(date +%F).dump"

@@ -13,7 +13,9 @@ class SuperAdminSeeder extends Seeder
      * La cuenta se identifica por el item corporativo. No tiene contraseña
      * propia: inicia sesión con sus credenciales del sistema externo, y en ese
      * primer ingreso se completa su `external_identifier` sin duplicarla. Es
-     * idempotente: si ya existe solo se asegura de que sea ADMIN.
+     * idempotente y corre en cada arranque: si la cuenta ya existe, solo se
+     * promueve cuando el sistema no tiene ningún ADMIN, para no deshacer en cada
+     * reinicio un cambio de rol hecho desde el panel.
      */
     public function run(): void
     {
@@ -48,8 +50,16 @@ class SuperAdminSeeder extends Seeder
             return;
         }
 
-        if ($user->role_id !== $adminRole->role_id) {
-            $user->update(['role_id' => $adminRole->role_id, 'premise_id' => null]);
+        if ($user->role_id === $adminRole->role_id) {
+            return;
         }
+
+        if (User::where('role_id', $adminRole->role_id)->exists()) {
+            $this->command?->info("El item {$item} no es ADMIN, pero ya hay administradores: se respeta su rol actual.");
+
+            return;
+        }
+
+        $user->update(['role_id' => $adminRole->role_id, 'premise_id' => null]);
     }
 }

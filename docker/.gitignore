@@ -1,4 +1,6 @@
-# Secretos y certificados de este despliegue: no se versionan.
+# Secretos, certificados y desafíos de Let's Encrypt de este despliegue: no se versionan.
 .env
 certs/*
 !certs/.gitkeep
+acme/*
+!acme/.gitkeep

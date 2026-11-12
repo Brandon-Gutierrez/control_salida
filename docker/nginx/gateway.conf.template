@@ -5,6 +5,13 @@
 # El DNS interno de Docker resuelve "app" aunque el contenedor se recree.
 resolver 127.0.0.11 valid=10s ipv6=off;
 
+# IP real del cliente. X-Forwarded-For solo se acepta si la conexión viene del
+# proxy de confianza (TRUSTED_PROXY, p. ej. el proxy de la empresa); de cualquier
+# otro origen se ignora y vale la IP de la conexión.
+set_real_ip_from ${TRUSTED_PROXY};
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;
+
 server {
     listen 80 default_server;
     server_name _;
@@ -14,6 +21,13 @@ server {
         access_log off;
         default_type text/plain;
         return 200 "ok\n";
+    }
+
+    # Let's Encrypt valida el dominio por HTTP: este camino no se redirige.
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type text/plain;
+        try_files $uri =404;
     }
 
     location / {
