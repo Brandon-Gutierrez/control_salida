@@ -25,7 +25,7 @@ class ManualEntryController extends Controller
     /** Confirma la salida con el motivo elegido. */
     public function confirm(ConfirmManualEntryRequest $request): JsonResponse
     {
-        $this->manual->confirm(
+        $leftAt = $this->manual->confirm(
             $request->user(),
             $request->validated('item'),
             $request->validated('leaveTicket'),
@@ -35,6 +35,7 @@ class ManualEntryController extends Controller
         return response()->json([
             'status' => 0,
             'message' => 'Salida temporal registrada correctamente',
+            'left_at' => $leftAt->toIso8601String(),
         ]);
     }
 }

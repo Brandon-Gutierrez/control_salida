@@ -10,6 +10,7 @@ use App\Repositories\ReasonPremiseRepository;
 use App\Repositories\UserRepository;
 use App\Services\External\ExternalAuthService;
 use App\Services\Qr\QrScanService;
+use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
 
@@ -82,9 +83,11 @@ class ManualEntryService
     /**
      * Confirma la salida con el motivo elegido, usando el comprobante de `validate`.
      *
+     * @return Carbon Hora en que quedó registrada la salida.
+     *
      * @throws ApiException
      */
-    public function confirm(User $manager, string $item, string $leaveTicket, string $reasonName): void
+    public function confirm(User $manager, string $item, string $leaveTicket, string $reasonName): Carbon
     {
         $premiseId = $this->premiseIdOf($manager);
         $person = $this->users->findByItem((int) $item);
@@ -99,7 +102,7 @@ class ManualEntryService
         }
 
         // Sin ubicación a propósito: el responsable opera desde el predio asignado a su cuenta.
-        $this->leaves->register($person, $leaveTicket, (string) $this->premises->findNameById($premiseId), $reasonName, null);
+        return $this->leaves->register($person, $leaveTicket, (string) $this->premises->findNameById($premiseId), $reasonName, null);
     }
 
     private function premiseIdOf(User $manager): int

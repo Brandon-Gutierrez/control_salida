@@ -179,7 +179,9 @@ class ManualEntryTest extends TestCase
             'error' => 0, 'data' => [['id_solicitud' => 77]],
         ])]);
 
-        $this->validateEntry()->assertOk()->assertJsonPath('action', 'showHome');
+        $this->validateEntry()->assertOk()
+            ->assertJsonPath('action', 'showHome')
+            ->assertJsonPath('returned_at', '2026-03-02T08:15:30-04:00');
 
         $this->assertSame('2026-03-02 08:15:30', $record->fresh()->return_time);
         Http::assertSent(fn (HttpRequest $r) => $r->url() === 'https://ext.test/register'
@@ -197,7 +199,9 @@ class ManualEntryTest extends TestCase
 
         $this->asManager()->postJson('/api/manager/manual-entry/confirm', [
             'item' => '2057', 'leaveTicket' => 'tk-1', 'reason' => 'Trámite',
-        ])->assertOk()->assertJsonPath('status', 0);
+        ])->assertOk()
+            ->assertJsonPath('status', 0)
+            ->assertJsonPath('left_at', '2026-03-02T08:15:30-04:00');
 
         $this->assertDatabaseHas('records', ['user_id' => $person->user_id, 'return_time' => null]);
         Http::assertSent(fn (HttpRequest $r) => $r->url() === 'https://ext.test/register'

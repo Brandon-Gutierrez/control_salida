@@ -276,6 +276,7 @@ class QrScanService
             'status' => 0,
             'action' => 'showHome',
             'message' => 'Bienvenido de regreso, su retorno ha sido registrado correctamente',
+            'returned_at' => ($returnedAt ?? now())->toIso8601String(),
         ];
     }
 }

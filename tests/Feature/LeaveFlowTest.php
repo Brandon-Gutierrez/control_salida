@@ -317,11 +317,13 @@ class LeaveFlowTest extends TestCase
         $this->fakeExternal($this->onLeaveCheckout());
         $record = $this->openLeave($this->premise);
 
-        $this->scan()->assertOk()->assertExactJson([
-            'status' => 0,
-            'action' => 'showHome',
-            'message' => 'Bienvenido de regreso, su retorno ha sido registrado correctamente',
-        ]);
+        $this->scan()->assertOk()
+            ->assertJson([
+                'status' => 0,
+                'action' => 'showHome',
+                'message' => 'Bienvenido de regreso, su retorno ha sido registrado correctamente',
+            ])
+            ->assertJsonStructure(['returned_at']);
 
         $this->assertNotNull($record->fresh()->return_time);
         Http::assertSent(fn (HttpRequest $r) => str_starts_with($r->url(), env('API_REGISTERCHECKOUT'))

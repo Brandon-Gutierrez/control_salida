@@ -9,10 +9,11 @@ use App\Repositories\PremiseRepository;
 use App\Repositories\ReasonPremiseRepository;
 use App\Repositories\RecordRepository;
 use App\Services\Audit\AuditLogger;
-use App\Services\Location\PremiseLocationService;
 use App\Services\External\EmployeeIdentityService;
 use App\Services\External\ExternalApiService;
 use App\Services\External\RegistrationOutcome;
+use App\Services\Location\PremiseLocationService;
+use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
@@ -39,12 +40,13 @@ class LeaveRegistrationService
     /**
      * @param  string  $leaveTicket  Comprobante recibido al escanear el QR.
      * @param  array{latitude: float, longitude: float, accuracy_m: float}|null  $location  Prueba de ubicación ya validada,
-     *                                                                                        que debe corresponder al predio del comprobante. Solo es
-     *                                                                                        null en el ingreso manual (lo opera el responsable en el predio).
+     *                                                                                      que debe corresponder al predio del comprobante. Solo es
+     *                                                                                      null en el ingreso manual (lo opera el responsable en el predio).
+     * @return Carbon Hora de la salida (la de Comteco o, si no la devolvió, la del servidor).
      *
      * @throws ApiException si alguna regla o servicio impide registrar la salida.
      */
-    public function register(User $user, string $leaveTicket, string $premiseName, string $reasonName, ?array $location): void
+    public function register(User $user, string $leaveTicket, string $premiseName, string $reasonName, ?array $location): Carbon
     {
         if ($leaveTicket === '') {
             throw ApiException::failure(
@@ -94,6 +96,8 @@ class LeaveRegistrationService
         );
 
         $this->tickets->discard($user, $leaveTicket);
+
+        return $leftAt ?? now();
     }
 
     /** El predio elegido debe ser el del QR escaneado y el motivo debe estar habilitado en él. */
