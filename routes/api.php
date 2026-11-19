@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminSummaryController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveLimitController;
 use App\Http\Controllers\LeaveStatsController;
@@ -34,6 +35,10 @@ use Illuminate\Support\Facades\Route;
 Route::get('/health', fn () => response()->json(['status' => 'OK']))->name('health');
 
 Route::post('/auth/login', [AuthController::class, 'login'])->name('auth.login');
+
+// Código del dispositivo (para dictarlo a RR. HH. cuando no se puede iniciar sesión).
+Route::get('/device/code', [DeviceController::class, 'show'])
+    ->middleware('throttle:30,1')->name('device.code');
 
 Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(function () {
 
@@ -88,6 +93,7 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
             Route::put('/users/{user}/password', [UserController::class, 'updatePassword'])->name('users.password.update');
             Route::put('/users/{user}/premise', [UserController::class, 'assignPremise'])->name('users.premise.update');
             Route::post('/users/{user}/device/reset', [UserController::class, 'resetDevice'])->name('users.device.reset');
+            Route::get('/devices', [DeviceController::class, 'lookup'])->name('devices.lookup');
             Route::post('/users/premise-managers', [PremiseManagerController::class, 'store'])->name('users.premise-managers.store');
 
             Route::get('/settings/qr', [QrSettingsController::class, 'show'])->name('settings.qr.show');
