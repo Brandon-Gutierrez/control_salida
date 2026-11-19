@@ -67,6 +67,42 @@ class LeaveStatsService
         ];
     }
 
+    /** Tope de salidas que devuelve `leavesInRange` (la persona rara vez supera unas pocas por día). */
+    public const MAX_LEAVES_LISTED = 200;
+
+    /**
+     * Detalle de cada salida entre dos fechas (ambas incluidas), la más
+     * reciente primero. Incluye las que aún no tienen retorno (`return_time`
+     * y `minutes` nulos): el detalle muestra todo, aunque los totales no
+     * cuenten las anteriores a hoy sin retorno.
+     *
+     * @return array<int, array{leave_time: string, return_time: ?string, premise: ?string, reason: ?string, minutes: ?int}>
+     */
+    public function leavesInRange(User $user, Carbon $from, Carbon $to): array
+    {
+        return Record::where('user_id', $user->user_id)
+            ->where('leave_time', '>=', $from->copy()->startOfDay())
+            ->where('leave_time', '<=', $to->copy()->endOfDay())
+            ->with(['reasonPremise.reason', 'reasonPremise.premise'])
+            ->orderByDesc('leave_time')
+            ->orderByDesc('record_id')
+            ->limit(self::MAX_LEAVES_LISTED)
+            ->get()
+            ->map(function ($record) {
+                $left = Carbon::parse($record->leave_time);
+                $returned = $record->return_time ? Carbon::parse($record->return_time) : null;
+
+                return [
+                    'leave_time' => $left->toIso8601String(),
+                    'return_time' => $returned?->toIso8601String(),
+                    'premise' => $record->reasonPremise?->premise?->name,
+                    'reason' => $record->reasonPremise?->reason?->name,
+                    'minutes' => $returned ? max(0, (int) round($left->diffInSeconds($returned, false) / 60)) : null,
+                ];
+            })
+            ->all();
+    }
+
     /**
      * Salidas anteriores a hoy que nunca marcaron retorno dentro del rango
      * indicado (sin rango, las del último mes). La vista de hoy no las pide.

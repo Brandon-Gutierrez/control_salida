@@ -7,6 +7,7 @@ use App\Http\Controllers\LeaveLimitController;
 use App\Http\Controllers\LeaveStatsController;
 use App\Http\Controllers\LeaveStatusController;
 use App\Http\Controllers\ManualEntryController;
+use App\Http\Controllers\MyLeavesController;
 use App\Http\Controllers\PremiseController;
 use App\Http\Controllers\PremiseManagerController;
 use App\Http\Controllers\PremiseReasonController;
@@ -45,6 +46,7 @@ Route::middleware(['auth:sanctum', 'active.session', 'device.bound'])->group(fun
     Route::middleware(['platform:mobile', 'role:'.Role::EMPLOYEE.','.Role::ADMIN])->group(function () {
         Route::get('/me/leave-status', LeaveStatusController::class)->name('me.leave-status');
         Route::get('/me/leave-stats', LeaveStatsController::class)->name('me.leave-stats');
+        Route::get('/me/leaves', MyLeavesController::class)->name('me.leaves');
         Route::post('/qr/scan', QrScanController::class)
             ->middleware('location.proof')->name('qr.scan');
         Route::get('/premises/{premise:name}/reasons', [PremiseReasonController::class, 'index'])->name('premises.reasons');
