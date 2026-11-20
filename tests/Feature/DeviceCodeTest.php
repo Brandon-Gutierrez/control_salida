@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserDevice;
 use App\Support\ClientPlatform;
 use App\Support\DeviceCode;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\SignsInWithDevice;
 use Tests\TestCase;
@@ -72,13 +73,20 @@ class DeviceCodeTest extends TestCase
 
         $this->getJson('/api/device/code', $headers)->assertOk()
             ->assertJsonPath('code', $expected)
-            ->assertJsonPath('linked', false);
+            ->assertJsonPath('linked', false)
+            ->assertJsonPath('linked_at', null);
 
+        $this->travelTo('2026-11-18 08:15:00');
         $this->bindPhone($this->employee('Beto', 20));
 
-        $this->getJson('/api/device/code', $headers)->assertOk()
+        $linked = $this->getJson('/api/device/code', $headers)->assertOk()
             ->assertJsonPath('code', $expected)
-            ->assertJsonPath('linked', true);
+            ->assertJsonPath('linked', true)
+            ->json('linked_at');
+
+        // Solo la fecha de vinculación: nada de la persona a la que pertenece.
+        $this->assertSame('2026-11-18 08:15:00', Carbon::parse($linked)->format('Y-m-d H:i:s'));
+        $this->getJson('/api/device/code', $headers)->assertJsonMissingPath('user')->assertJsonMissingPath('name');
     }
 
     public function test_exige_un_identificador_de_dispositivo_valido(): void

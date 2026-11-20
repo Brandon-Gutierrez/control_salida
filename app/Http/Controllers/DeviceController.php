@@ -14,9 +14,10 @@ use Illuminate\Http\Request;
 class DeviceController extends Controller
 {
     /**
-     * Público (sin sesión): código de este dispositivo y si ya está vinculado a
-     * una cuenta. Así quien no puede iniciar sesión porque su teléfono quedó
-     * vinculado a otra cuenta puede dictar el código a Recursos Humanos.
+     * Público (sin sesión): código de este dispositivo, si ya está vinculado a
+     * una cuenta y desde cuándo (`linked_at`, sin datos de la persona). Así
+     * quien no puede iniciar sesión porque su teléfono quedó vinculado a otra
+     * cuenta puede dictar el código a Recursos Humanos.
      */
     public function show(Request $request): JsonResponse
     {
@@ -37,10 +38,16 @@ class DeviceController extends Controller
 
         $hash = hash('sha256', $deviceId);
 
+        $device = UserDevice::where('platform', $platform)
+            ->where('device_hash', $hash)
+            ->orderByDesc('bound_at')
+            ->first();
+
         return response()->json([
             'status' => 0,
             'code' => DeviceCode::fromHash($hash),
-            'linked' => UserDevice::where('platform', $platform)->where('device_hash', $hash)->exists(),
+            'linked' => $device !== null,
+            'linked_at' => $device?->bound_at?->toIso8601String(),
         ]);
     }
 
