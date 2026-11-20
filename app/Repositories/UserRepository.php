@@ -86,7 +86,8 @@ class UserRepository
             ->with([
                 'role:role_id,name',
                 'premise:premise_id,name',
-                'devices:id,user_id,platform,bound_at',
+                // El hash se carga solo para calcular el código corto: no se serializa.
+                'devices:id,user_id,platform,bound_at,device_hash',
             ])
             ->orderBy('name')
             ->get();

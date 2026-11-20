@@ -113,6 +113,25 @@ class DeviceCodeTest extends TestCase
         $this->assertSame($code, $found[0]['code']);
     }
 
+    public function test_la_lista_de_usuarios_del_admin_trae_el_codigo_de_cada_dispositivo(): void
+    {
+        $beto = $this->employee('Beto', 20);
+        $this->bindPhone($beto);
+        $this->employee('Ana', 30); // sin dispositivo
+
+        $rows = collect($this->signIn($this->admin(), ClientPlatform::WEB)
+            ->getJson('/api/admin/users')
+            ->assertOk()->json('data'));
+
+        $row = $rows->firstWhere('user_id', $beto->user_id);
+        $this->assertCount(1, $row['devices']);
+        $this->assertSame(DeviceCode::fromDeviceId(self::PHONE), $row['devices'][0]['code']);
+        $this->assertSame('mobile', $row['devices'][0]['platform']);
+        // El código sale; el hash completo, nunca.
+        $this->assertArrayNotHasKey('device_hash', $row['devices'][0]);
+        $this->assertSame([], $rows->firstWhere('name', 'Ana')['devices']);
+    }
+
     public function test_un_codigo_sin_cuenta_devuelve_lista_vacia_y_uno_invalido_se_rechaza(): void
     {
         $admin = $this->signIn($this->admin(), ClientPlatform::WEB);
