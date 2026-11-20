@@ -20,8 +20,11 @@ class AdminSummaryTest extends TestCase
     use SignsInWithDevice;
 
     private Role $employeeRole;
+
     private Role $adminRole;
+
     private Role $managerRole;
+
     private int $item = 100;
 
     protected function setUp(): void
@@ -90,8 +93,23 @@ class AdminSummaryTest extends TestCase
             ->assertJsonPath('data.premises.without_reasons', 2)
             ->assertJsonPath('data.users.total', 6)
             ->assertJsonPath('data.users.admins', 1)
+            ->assertJsonPath('data.users.managers', 2)
             ->assertJsonPath('data.users.managers_without_premise', 1)
-            ->assertJsonPath('data.users.employees_without_app', 2);
+            ->assertJsonPath('data.users.employees_without_app', 2)
+            ->assertJsonPath('data.reasons.active', 1);
+    }
+
+    public function test_los_motivos_retirados_no_cuentan_como_activos(): void
+    {
+        $premise = $this->premise('Central');
+        $this->enable($premise, 'A');
+        $this->enable($premise, 'B');
+        LeaveReason::where('code', 'B')->firstOrFail()->delete();
+
+        $this->signIn($this->user($this->adminRole), ClientPlatform::WEB)
+            ->getJson('/api/admin/summary')
+            ->assertOk()
+            ->assertJsonPath('data.reasons.active', 1);
     }
 
     public function test_sin_datos_devuelve_ceros(): void
@@ -101,7 +119,9 @@ class AdminSummaryTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.premises.total', 0)
             ->assertJsonPath('data.users.total', 1)
-            ->assertJsonPath('data.users.employees_without_app', 0);
+            ->assertJsonPath('data.users.managers', 0)
+            ->assertJsonPath('data.users.employees_without_app', 0)
+            ->assertJsonPath('data.reasons.active', 0);
     }
 
     public function test_solo_el_admin_en_la_web_puede_verlo(): void

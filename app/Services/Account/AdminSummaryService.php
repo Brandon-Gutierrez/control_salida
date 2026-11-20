@@ -2,6 +2,7 @@
 
 namespace App\Services\Account;
 
+use App\Models\LeaveReason;
 use App\Models\Premise;
 use App\Models\Role;
 use App\Models\User;
@@ -20,7 +21,8 @@ class AdminSummaryService
     /**
      * @return array{
      *     premises: array{total: int, without_location: int, without_manager: int, without_reasons: int},
-     *     users: array{total: int, admins: int, managers_without_premise: int, employees_without_app: int},
+     *     users: array{total: int, admins: int, managers: int, managers_without_premise: int, employees_without_app: int},
+     *     reasons: array{active: int},
      *     reasons_sync: array{status: string, source: string, at: string, error: ?string}|null
      * }
      */
@@ -38,12 +40,15 @@ class AdminSummaryService
             'users' => [
                 'total' => User::count(),
                 'admins' => $this->withRole(Role::ADMIN)->count(),
+                'managers' => $this->withRole(Role::MANAGE_PREMISE)->count(),
                 'managers_without_premise' => $this->withRole(Role::MANAGE_PREMISE)->whereNull('premise_id')->count(),
                 // Empleados que nunca iniciaron sesión en la app móvil (sin teléfono vinculado).
                 'employees_without_app' => $this->withRole(Role::EMPLOYEE)
                     ->whereDoesntHave('devices', fn (Builder $device) => $device->where('platform', 'mobile'))
                     ->count(),
             ],
+            // Motivos que Comteco ofrece hoy (los retirados tienen borrado lógico y no cuentan).
+            'reasons' => ['active' => LeaveReason::count()],
             // Si la última sincronización falló, Inicio lo avisa.
             'reasons_sync' => $this->reasonSyncSummary(),
         ];
