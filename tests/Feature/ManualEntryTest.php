@@ -173,7 +173,7 @@ class ManualEntryTest extends TestCase
         $person = User::create(['external_identifier' => 'tok-2057', 'name' => 'Juan Pérez', 'item' => 2057, 'role_id' => $role->role_id]);
         $record = Record::create([
             'user_id' => $person->user_id, 'reason_premise_id' => $this->reasonPremiseId,
-            'leave_time' => now()->subHour(), 'return_time' => null,
+            'leave_time' => '2026-03-02 07:00:05', 'return_time' => null,
         ]);
         $this->fakeExternal(['checkout' => fn () => Http::response([
             'error' => 0, 'data' => [['id_solicitud' => 77]],
@@ -181,6 +181,8 @@ class ManualEntryTest extends TestCase
 
         $this->validateEntry()->assertOk()
             ->assertJsonPath('action', 'showHome')
+            // La hora de la salida, para decir cuánto tiempo estuvo fuera.
+            ->assertJsonPath('left_at', '2026-03-02T07:00:05-04:00')
             ->assertJsonPath('returned_at', '2026-03-02T08:15:30-04:00');
 
         $this->assertSame('2026-03-02 08:15:30', $record->fresh()->return_time);

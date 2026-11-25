@@ -74,6 +74,18 @@ class RecordRepository
         return $record ? (int) $record->update(['return_time' => $returnedAt ?? now()]) : 0;
     }
 
+    /** Hora de la salida abierta más reciente de la persona (la que cierra `registerReturn`). */
+    public function openLeaveTime(int $userId): ?Carbon
+    {
+        $leaveTime = Record::where('user_id', $userId)
+            ->whereNull('return_time')
+            ->orderByDesc('leave_time')
+            ->orderByDesc('record_id')
+            ->value('leave_time');
+
+        return $leaveTime ? Carbon::parse($leaveTime) : null;
+    }
+
     /** La persona tiene alguna salida abierta (sin retorno) en el historial local. */
     public function hasOpenLeave(int $userId): bool
     {

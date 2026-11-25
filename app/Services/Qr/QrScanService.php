@@ -190,6 +190,9 @@ class QrScanService
             );
         }
 
+        // Se lee antes de cerrar la salida: la respuesta muestra a qué hora salió
+        // y cuánto tiempo estuvo fuera.
+        $leftAt = $this->records->openLeaveTime($user->user_id);
         $premiseName = $this->premises->findNameById($premiseId) ?? '';
 
         try {
@@ -276,6 +279,7 @@ class QrScanService
             'status' => 0,
             'action' => 'showHome',
             'message' => 'Bienvenido de regreso, su retorno ha sido registrado correctamente',
+            'left_at' => $leftAt?->toIso8601String(),
             'returned_at' => ($returnedAt ?? now())->toIso8601String(),
         ];
     }
