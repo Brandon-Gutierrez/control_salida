@@ -1,0 +1,53 @@
+# nginx de la API. Dos entradas con las mismas rutas:
+#   443 (publicado)  -> HTTPS para la app móvil y cualquier cliente de fuera.
+#   80 (sin publicar) -> solo para la web del mismo servidor, por la red compartida de Docker.
+# El entrypoint de nginx sustituye ${TRUSTED_PROXY}.
+
+# El DNS interno de Docker resuelve "app" aunque el contenedor se recree.
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+# IP real del cliente. X-Forwarded-For y X-Forwarded-Proto solo se aceptan de
+# TRUSTED_PROXY (la red de la web); de cualquier otro origen se ignoran y valen
+# la IP y el esquema de la conexión.
+set_real_ip_from ${TRUSTED_PROXY};
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;
+
+geo $realip_remote_addr $from_trusted_proxy {
+    default 0;
+    ${TRUSTED_PROXY} 1;
+}
+
+# Esquema con el que entró la persona: por la red interna se llega en HTTP aunque
+# el navegador usara HTTPS.
+map "$from_trusted_proxy:$http_x_forwarded_proto" $client_scheme {
+    default   $scheme;
+    "1:https" https;
+    "1:http"  http;
+}
+
+map $client_scheme $client_https {
+    default "";
+    https   on;
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    include /etc/nginx/api-locations.conf;
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name _;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1h;
+
+    include /etc/nginx/api-locations.conf;
+}

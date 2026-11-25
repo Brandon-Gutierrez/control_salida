@@ -1,0 +1,5 @@
+# Planificador de Laravel (routes/console.php): lo lee el crond del contenedor de
+# la API. El Dockerfile lo copia a /etc/crontabs/www-data, así que corre como
+# www-data (el nombre del archivo es el usuario; no lleva columna de usuario).
+# Debe usar saltos de línea LF. El archivo de latido lo revisa healthcheck.sh.
+* * * * * cd /var/www/html && /usr/local/bin/php artisan schedule:run --whisper --no-ansi && touch /tmp/scheduler.heartbeat

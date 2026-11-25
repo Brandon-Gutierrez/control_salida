@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\LeaveReason;
 use App\Models\Premise;
+use App\Models\ReasonPremise;
 use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
@@ -15,6 +16,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Testing\TestResponse;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\SignsInWithDevice;
 use Tests\TestCase;
 
@@ -61,7 +64,7 @@ class ReasonSyncTest extends TestCase
         }
     }
 
-    private function sync(): \Illuminate\Testing\TestResponse
+    private function sync(): TestResponse
     {
         return $this->signIn($this->admin, ClientPlatform::WEB)->postJson('/api/admin/reasons/sync');
     }
@@ -106,7 +109,7 @@ class ReasonSyncTest extends TestCase
         $this->seedCatalog(['T' => 'Trámite', 'M' => 'Médico', 'A' => 'Almuerzo']);
         $premise = Premise::create(['name' => 'Prado', 'latitude' => -17.39, 'longitude' => -66.15]);
         app(PremiseRepository::class)->syncReasonsByName($premise, ['Trámite', 'Médico']);
-        $relationId = \App\Models\ReasonPremise::where('reason_id', LeaveReason::where('code', 'M')->value('reason_id'))->value('id');
+        $relationId = ReasonPremise::where('reason_id', LeaveReason::where('code', 'M')->value('reason_id'))->value('id');
         $record = Record::create([
             'user_id' => $this->admin->user_id, 'reason_premise_id' => $relationId,
             'leave_time' => now()->subHour(), 'return_time' => now(),
@@ -157,7 +160,7 @@ class ReasonSyncTest extends TestCase
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('invalidResponses')]
+    #[DataProvider('invalidResponses')]
     public function test_una_respuesta_invalida_conserva_el_catalogo(array $body, int $status, string $code, string $fragment): void
     {
         $this->seedCatalog(['T' => 'Trámite', 'M' => 'Médico']);
@@ -270,6 +273,8 @@ class ReasonSyncTest extends TestCase
             $this->assertTrue($event->withoutOverlapping);
             $this->assertTrue($event->onOneServer);
             $this->assertStringContainsString('--scheduled', $event->command);
+            // Sin esto Laravel manda la salida a /dev/null y no llega a `docker logs`.
+            $this->assertNotSame($event->getDefaultOutput(), $event->output);
         }
     }
 

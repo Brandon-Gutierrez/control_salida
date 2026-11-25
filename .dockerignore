@@ -17,10 +17,7 @@ bootstrap/cache/*.php
 public/hot
 public/storage
 tests
-docker/docker-compose*.yml
-docker/README.md
-docker/nginx
+docker/docker-compose.yml
 docker/certs
 docker/.env
 docker/.env.example
-docker/acme

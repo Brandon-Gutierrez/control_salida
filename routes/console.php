@@ -1,14 +1,20 @@
 <?php
 
 use Illuminate\Support\Facades\Schedule;
+use Illuminate\Support\Stringable;
 
 /*
 |--------------------------------------------------------------------------
 | Tareas programadas
 |--------------------------------------------------------------------------
 |
-| Requieren un ejecutor del planificador: `php artisan schedule:work` (servicio
-| `scheduler` del docker-compose) o `schedule:run` cada minuto desde el cron.
+| Requieren que algo llame a `schedule:run` cada minuto. En Docker lo hace el
+| crontab del contenedor de la API (docker/crontab); fuera de Docker, un cron
+| propio o `php artisan schedule:work`.
+|
+| Laravel descarta la salida de los comandos programados. Con `thenWithOutput`
+| se reenvía (incluidos sus logs a stderr) a la salida de `schedule:run`, para
+| que aparezca en `docker logs`.
 |
 */
 
@@ -21,5 +27,8 @@ foreach (['00:00', '00:15', '00:30'] as $time) {
         ->at($time)
         ->timezone('America/La_Paz')
         ->withoutOverlapping()
-        ->onOneServer();
+        ->onOneServer()
+        ->thenWithOutput(function (Stringable $output) {
+            fwrite(STDOUT, PHP_EOL.$output);
+        }, onlyIfOutputExists: true);
 }
