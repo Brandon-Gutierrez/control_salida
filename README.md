@@ -41,6 +41,7 @@ Se leen desde `config/services.php` (`external_api`):
 | `API_GETEMPLOYEE` | Datos del empleado (foto, cargo, área) |
 | `API_GETREASONS` | Catálogo de motivos de salida |
 | `API_GETCHECKOUT` | Salida registrada del día |
+| `API_LISTOUTPUTBYITEM` | Historial para el detalle móvil. Si se deja vacío, usa `https://excnx.comteco.com.bo/apiAuthTest/index.php/api/listOutputByItem`. Laravel agrega el `item` de la sesión. |
 | `API_REGISTERCHECKOUT` | Registro de salidas y retornos |
 
 ## Despliegue con Docker (producción)

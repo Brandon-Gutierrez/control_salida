@@ -81,6 +81,12 @@ class ExternalApiService
         ]);
     }
 
+    public function leaveHistory(int|string $item): Response
+    {
+        return $this->request()->withoutRedirecting()
+            ->get(config('services.external_api.leave_history_url'), ['item' => $item]);
+    }
+
     /** Nombre del predio en texto plano (mayúsculas, sin espacios sobrantes), como lo espera `in_predio`. */
     public static function premiseLabel(string $premiseName): string
     {

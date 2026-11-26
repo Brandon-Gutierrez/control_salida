@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\Leave\LeaveStatsService;
+use App\Services\Leave\LeaveDetailService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +14,7 @@ class MyLeavesController extends Controller
      * (`from` y `to`, Y-m-d, ambas incluidas): predio, motivo, hora de salida,
      * hora de retorno y duración. La más reciente primero.
      */
-    public function __invoke(Request $request, LeaveStatsService $stats): JsonResponse
+    public function __invoke(Request $request, LeaveDetailService $details): JsonResponse
     {
         $dates = $request->validate([
             'from' => ['required', 'date_format:Y-m-d'],
@@ -23,7 +23,7 @@ class MyLeavesController extends Controller
 
         return response()->json([
             'status' => 0,
-            'data' => $stats->leavesInRange(
+            'data' => $details->leavesInRange(
                 $request->user(),
                 Carbon::createFromFormat('Y-m-d', $dates['from']),
                 Carbon::createFromFormat('Y-m-d', $dates['to']),

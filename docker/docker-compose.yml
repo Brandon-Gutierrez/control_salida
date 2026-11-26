@@ -78,6 +78,7 @@ services:
       API_GETEMPLOYEE: ${API_GETEMPLOYEE:-}
       API_GETREASONS: ${API_GETREASONS:-}
       API_GETCHECKOUT: ${API_GETCHECKOUT:-}
+      API_LISTOUTPUTBYITEM: ${API_LISTOUTPUTBYITEM:-}
       API_REGISTERCHECKOUT: ${API_REGISTERCHECKOUT:-}
 
       # Administrador inicial (se identifica por su item del sistema externo).

@@ -3,13 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\LeaveReason;
-use App\Models\Premise;
-use App\Models\Record;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\ClientPlatform;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Tests\Concerns\SignsInWithDevice;
 use Tests\TestCase;
 
@@ -21,7 +20,7 @@ class MyLeavesTest extends TestCase
 
     private User $employee;
 
-    private int $reasonPremiseId;
+    private const HISTORY_URL = 'https://comteco.test/listOutputByItem';
 
     protected function setUp(): void
     {
@@ -30,21 +29,28 @@ class MyLeavesTest extends TestCase
         $this->employee = User::create([
             'external_identifier' => 'e1', 'name' => 'Juan', 'item' => 2057, 'role_id' => $role->role_id,
         ]);
-        $premise = Premise::create(['name' => 'Prado', 'latitude' => -17.39, 'longitude' => -66.15]);
-        $reason = LeaveReason::create(['name' => 'Trámite', 'code' => 'T']);
-        $this->reasonPremiseId = DB::table('reason_premise')->insertGetId([
-            'reason_id' => $reason->reason_id, 'premise_id' => $premise->premise_id,
+        config([
+            'services.external_api.leave_history_url' => self::HISTORY_URL,
+            'services.external_api.key' => 'test-key',
         ]);
+        Http::preventStrayRequests();
     }
 
-    private function leave(string $from, ?string $to, ?User $user = null): void
+    private function leave(string $from, ?string $to, array $fields = []): array
     {
-        Record::create([
-            'user_id' => ($user ?? $this->employee)->user_id,
-            'reason_premise_id' => $this->reasonPremiseId,
-            'leave_time' => $from,
-            'return_time' => $to,
-        ]);
+        return $fields + [
+            'ID_SOLICITUD' => '106392',
+            'COD_EMPLEADO' => (string) $this->employee->item,
+            'COD_MOTIVO' => 'PARTICULAR',
+            'FECHA_SALIDA' => $from,
+            'FECHA_RETORNO' => $to,
+            'PREDIO' => null,
+        ];
+    }
+
+    private function history(array $rows, int $error = 0): void
+    {
+        Http::fake([self::HISTORY_URL.'?*' => Http::response(['error' => $error, 'data' => $rows])]);
     }
 
     private function list(string $from, string $to)
@@ -55,23 +61,36 @@ class MyLeavesTest extends TestCase
 
     public function test_devuelve_predio_motivo_horas_y_duracion_la_mas_reciente_primero(): void
     {
-        $this->leave('2025-10-15 08:00:00', '2025-10-15 08:45:00');
-        $this->leave('2025-10-15 11:00:00', '2025-10-15 11:30:00');
+        LeaveReason::create(['name' => 'Trámite particular', 'code' => 'PARTICULAR'])->delete();
+        $this->history([
+            $this->leave('2026-11-16 12:17:40', '2026-11-16 12:34:44', ['COD_MOTIVO' => 'ALMUERZO']),
+            $this->leave('2026-11-18 10:06:40', '2026-11-18 10:33:08', ['PREDIO' => 'Prado']),
+        ]);
 
-        $data = $this->list('2025-10-15', '2025-10-15')->assertOk()->json('data');
-
-        $this->assertCount(2, $data);
-        $this->assertSame('Prado', $data[0]['premise']);
-        $this->assertSame('Trámite', $data[0]['reason']);
-        $this->assertStringStartsWith('2025-10-15T11:00:00', $data[0]['leave_time']);
-        $this->assertStringStartsWith('2025-10-15T11:30:00', $data[0]['return_time']);
-        $this->assertSame(30, $data[0]['minutes']);
-        $this->assertSame(45, $data[1]['minutes']);
+        $this->list('2026-11-16', '2026-11-18')->assertOk()->assertExactJson([
+            'status' => 0,
+            'data' => [
+                [
+                    'leave_time' => '2026-11-18T10:06:40-04:00',
+                    'return_time' => '2026-11-18T10:33:08-04:00',
+                    'premise' => 'Prado',
+                    'reason' => 'Trámite particular',
+                    'minutes' => 26,
+                ],
+                [
+                    'leave_time' => '2026-11-16T12:17:40-04:00',
+                    'return_time' => '2026-11-16T12:34:44-04:00',
+                    'premise' => null,
+                    'reason' => 'ALMUERZO',
+                    'minutes' => 17,
+                ],
+            ],
+        ]);
     }
 
     public function test_una_salida_sin_retorno_no_tiene_hora_de_retorno_ni_duracion(): void
     {
-        $this->leave('2025-10-15 08:00:00', null);
+        $this->history([$this->leave('2025-10-15 08:00:00', null)]);
 
         $data = $this->list('2025-10-15', '2025-10-15')->assertOk()->json('data');
 
@@ -81,17 +100,26 @@ class MyLeavesTest extends TestCase
 
     public function test_solo_incluye_el_rango_y_las_salidas_de_la_persona(): void
     {
-        $role = Role::firstWhere('name', Role::EMPLOYEE);
-        $other = User::create(['external_identifier' => 'e2', 'name' => 'Ana', 'item' => 9, 'role_id' => $role->role_id]);
-        $this->leave('2025-10-14 23:59:00', '2025-10-15 00:10:00'); // sale el 14: fuera del rango
-        $this->leave('2025-10-15 23:50:00', '2025-10-16 00:20:00'); // sale el 15: dentro
-        $this->leave('2025-10-16 00:00:00', '2025-10-16 00:05:00'); // 16: fuera
-        $this->leave('2025-10-15 09:00:00', '2025-10-15 09:05:00', $other); // de otra persona
+        $this->history([
+            $this->leave('2025-10-14 23:59:59', '2025-10-15 00:10:00'),
+            $this->leave('2025-10-15 00:00:00', '2025-10-15 00:10:00'),
+            $this->leave('2025-10-15 23:59:59', '2025-10-16 00:30:00'),
+            $this->leave('2025-10-16 00:00:00', '2025-10-16 00:05:00'),
+            $this->leave('2025-10-15 09:00:00', '2025-10-15 09:05:00', ['COD_EMPLEADO' => '9']),
+        ]);
 
-        $data = $this->list('2025-10-15', '2025-10-15')->assertOk()->json('data');
+        $this->signIn($this->employee, ClientPlatform::MOBILE)
+            ->getJson('/api/me/leaves?from=2025-10-15&to=2025-10-15&item=9')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.leave_time', '2025-10-15T23:59:59-04:00')
+            ->assertJsonPath('data.0.minutes', 30)
+            ->assertJsonPath('data.1.leave_time', '2025-10-15T00:00:00-04:00');
 
-        $this->assertCount(1, $data);
-        $this->assertStringStartsWith('2025-10-15T23:50:00', $data[0]['leave_time']);
+        Http::assertSent(fn (Request $request) => $request->method() === 'GET'
+            && $request->url() === self::HISTORY_URL.'?item=2057'
+            && $request->hasHeader('keysoftware', 'test-key'));
+        Http::assertSentCount(1);
     }
 
     public function test_exige_fechas_validas(): void
@@ -100,5 +128,20 @@ class MyLeavesTest extends TestCase
 
         $client->getJson('/api/me/leaves')->assertStatus(422);
         $client->getJson('/api/me/leaves?from=2025-10-15&to=2025-10-01')->assertStatus(422);
+    }
+
+    public function test_el_historial_vacio_devuelve_una_lista_vacia(): void
+    {
+        $this->history([]);
+
+        $this->list('2025-10-15', '2025-10-15')->assertOk()->assertExactJson(['status' => 0, 'data' => []]);
+    }
+
+    public function test_reporta_un_fallo_de_comteco_como_error_temporal(): void
+    {
+        $this->history([], error: 1);
+
+        $this->list('2025-10-15', '2025-10-15')->assertStatus(502)
+            ->assertJsonPath('code', 'LEAVE_HISTORY_UNAVAILABLE');
     }
 }

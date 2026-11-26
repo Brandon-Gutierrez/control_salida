@@ -24,6 +24,7 @@ return [
         'employee_url' => env('API_GETEMPLOYEE'),
         'reasons_url' => env('API_GETREASONS'),
         'checkout_url' => env('API_GETCHECKOUT'),
+        'leave_history_url' => env('API_LISTOUTPUTBYITEM') ?: 'https://excnx.comteco.com.bo/apiAuthTest/index.php/api/listOutputByItem',
         'register_checkout_url' => env('API_REGISTERCHECKOUT'),
     ],
 
